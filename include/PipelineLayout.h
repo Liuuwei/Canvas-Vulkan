@@ -1,0 +1,13 @@
+#pragma once 
+
+#include "vulkan/vulkan_core.h"
+#include <vulkan/vulkan.h>
+
+class PipelineLayout {
+public:
+    PipelineLayout(VkDevice device, VkPipelineLayoutCreateInfo layoutInfo);
+    VkPipelineLayout get() const { return pipelineLayout_; }
+private:
+    VkDevice device_;
+    VkPipelineLayout pipelineLayout_;
+};
