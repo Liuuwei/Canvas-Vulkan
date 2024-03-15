@@ -1,12 +1,12 @@
 #include "ShaderModule.h"
 
-#include "VulkanHelp.h"
+#include "Tools.h"
 #include "vulkan/vulkan_core.h"
 #include <cstdint>
 #include <stdexcept>
 
 ShaderModule::ShaderModule(VkDevice device, const std::string& path) : device_(device) {
-    auto code = VulkanHelp::readFile(path);
+    auto code = Tools::readFile(path);
 
     VkShaderModuleCreateInfo shaderInfo{};
     shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;

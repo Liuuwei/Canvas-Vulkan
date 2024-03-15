@@ -1,12 +1,16 @@
 #pragma once
 
+#include "Buffer.h"
+#include "Fence.h"
 #include "Image.h"
-#include "ImageView.h"
-#include "Memory.h"
 #include "PipelineLayout.h"
 #include "RenderPass.h"
+#include "Sampler.h"
+#include "Semaphore.h"
 #include "Swapchain.h"
+#include "Triangle.h"
 #include "Vertex.h"
+#include "ktx.h"
 #include "vulkan/vulkan_core.h"
 #include <cstdint>
 #include <functional>
@@ -17,16 +21,17 @@
 #include <vector>
 #include <memory>
 
-#include "VulkanHelp.h"
+#include "Tools.h"
 #include "DescriptorSetLayout.h"
 #include "RenderPass.h"
 #include "Pipeline.h"
 #include "Swapchain.h"
-#include "Memory.h"
 #include "FrameBuffer.h"
 #include "CommandPool.h"
 #include "CommandBuffer.h"
 #include "DescriptorPool.h"
+#include "Block.h"
+#include "Sampler.h"
 
 class Vulkan {
 public:
@@ -43,11 +48,13 @@ private:
     void pickPhysicalDevice();
     void createLogicDevice();
     void createSwapChain();
-    void createImageViews();
     void createRenderPass();
+    void createUniformBuffers();
+    void createSamplers();
     void createDescriptorPool();
     void createDescriptorSetLayout();
     void createDescriptorSet();
+    void createVertex();
     void createGraphicsPipelines();
     void createColorResource();
     void createDepthResource();
@@ -56,19 +63,25 @@ private:
     void createCommandBuffers();
     void createVertexBuffer();
     void createIndexBuffer();
+    void createSyncObjects();
+    void recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void draw();
+    void loadAssets();
+    void updateDrawAssets();
+    void recreateSwapChain();
 
 private:
-    bool checkValidationLayerSupport() const;
-    bool checkDeviceExtensionsSupport(VkPhysicalDevice physicalDevice) const;
+    bool checkValidationLayerSupport() ;
+    bool checkDeviceExtensionsSupport(VkPhysicalDevice physicalDevice) ;
     bool deviceSuitable(VkPhysicalDevice);
-    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) const;
-    VkSampleCountFlagBits getMaxUsableSampleCount() const;
-    VkFormat findDepthFormat() const;
-    VkFormat findSupportedFormat(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features) const;
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
-    void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
-    VkCommandBuffer beginSingleTimeCommands() const;
-    void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue) const;
+    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) ;
+    VkSampleCountFlagBits getMaxUsableSampleCount() ;
+    VkFormat findDepthFormat() ;
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features) ;
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) ;
+    void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) ;
+    VkCommandBuffer beginSingleTimeCommands();
+    void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue);
     
     GLFWwindow* windows_;
     uint32_t width_;
@@ -89,32 +102,46 @@ private:
 
     std::unique_ptr<SwapChain> swapChain_;
 
+    std::unique_ptr<Sampler> sampler_;
+
     std::unique_ptr<DescriptorPool> descriptorPool_;
-    std::unique_ptr<DescriptorSetlayout> descriptorSetLayout_;
+    std::unique_ptr<DescriptorSetLayout> descriptorSetLayout_;
     std::vector<VkDescriptorSet> descriptorSets_;
 
     std::unique_ptr<PipelineLayout> pipelineLayout_;
     std::unique_ptr<Pipeline> graphicsPipeline_;
 
     std::unique_ptr<Image> colorImage_;
-    std::unique_ptr<ImageView> colorImageView_;
-    std::unique_ptr<Memory> colorImageMemory_;
 
     std::unique_ptr<Image> depthImage_;
-    std::unique_ptr<ImageView> depthImageView_;
 
     std::vector<std::unique_ptr<FrameBuffer>> frameBuffers_;
 
     std::unique_ptr<CommandPool> commandPool_;
     std::vector<std::unique_ptr<CommandBuffer>> commandBuffers_;
-    
-    VulkanHelp::QueueFamilyIndices queueFamilies_;
+
+    std::unique_ptr<Buffer> vertexBuffer_;
+    std::unique_ptr<Buffer> indexBuffer_;
+
+    std::vector<std::unique_ptr<Fence>> inFlightFences_;
+    std::vector<std::unique_ptr<Semaphore>> imageAvaiableSemaphores_;
+    std::vector<std::unique_ptr<Semaphore>> renderFinishSemaphores_;
+
+    const std::string skyBoxPath_ = "../textures/skybox.ktx";
+    ktxTexture* skyBoxTexture_;
+    std::unique_ptr<Image> skyBoxImage_;
+
+    Tools::QueueFamilyIndices queueFamilies_;
     VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
 
     const std::vector<const char*> validationLayers_ = {"VK_LAYER_KHRONOS_validation"};
     const std::vector<const char*> deviceExtensions_ = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
     std::unique_ptr<Vertex> vertex_;
+
+    uint32_t currentFrame_ = 0;
+
+    std::vector<std::unique_ptr<Buffer>> uniformBuffers_;
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 
@@ -123,5 +150,46 @@ private:
         void* pUserData
     );
 
-    const int MAX_FRAMES_IN_FLIGHT = 2;
+    bool resized_ = false;
+
+    static void frameBufferResizedCallback(GLFWwindow* window, int width, int height) {
+        auto app = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
+        app->resized_ = true;
+    }
+
+    static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+
+    float x_ = 0.0f;
+    float y_ = 0.0f;
+    float z_ =  0.0f;
+    float radius_ = 0.5f;
+
+    std::vector<Block::Point> vertices_ = {
+       {-0.5f, 0.5f, 0.5f, -1.0f, 1.0f, 1.0f}, 
+       {0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f}, 
+       {-0.5f, -0.5f, 0.5f, -1.0f, -1.0f, 1.0f}, 
+       {0.5f, -0.5f, 0.5f, 1.0f, -1.0f, 1.0f}, 
+
+       {-0.5f, 0.5f, -0.5f, -1.0f, 1.0f, -1.0f}, 
+       {0.5f, 0.5f, -0.5f, 1.0f, 1.0f, -1.0f}, 
+       {-0.5f, -0.5f, -0.5f, -1.0f, -1.0f, -1.0f}, 
+       {0.5f, -0.5f, -0.5f, 1.0f, -1.0f, -1.0f}, 
+    };
+
+    std::vector<uint32_t> indices_ = {
+        0, 1, 2, 2, 1, 3, 
+        5, 4, 7, 7, 4, 6, 
+
+        4, 0, 6, 6, 0, 2, 
+        1, 5, 3, 3, 5, 7, 
+
+        4, 5, 0, 0, 5, 1, 
+        2, 3, 6, 6, 3, 7
+    };
+
+    struct UniformBufferObject {
+        alignas(16) glm::mat4 model_;
+        alignas(16) glm::mat4 view_;
+        alignas(16) glm::mat4 proj_;
+    };
 };

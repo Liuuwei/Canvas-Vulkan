@@ -3,11 +3,9 @@
 #include "vulkan/vulkan_core.h"
 #include <vulkan/vulkan.h>
 
-#include <vector>
-
-class DescriptorSetlayout {
+class DescriptorSetLayout {
 public:
-    DescriptorSetlayout(VkDevice device, VkDescriptorSetLayoutCreateInfo layoutInfo);
+    DescriptorSetLayout(VkDevice device, VkDescriptorSetLayoutCreateInfo layoutInfo);
     VkDescriptorSetLayout get() const { return descriptorSetlayout_; }
 private:
     VkDevice device_;

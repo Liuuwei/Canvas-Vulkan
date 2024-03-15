@@ -1,13 +1,12 @@
 #include "Swapchain.h"
+#include "Tools.h"
 #include "vulkan/vulkan_core.h"
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 
 SwapChain::SwapChain(VkDevice device, VkSwapchainCreateInfoKHR swapChainInfo) : device_(device) {
-    if (vkCreateSwapchainKHR(device, &swapChainInfo, nullptr, &swapChain_) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create swap chain!");
-    }
+    VK_CHECK(vkCreateSwapchainKHR(device, &swapChainInfo, nullptr, &swapChain_));
 
     format_ = swapChainInfo.imageFormat;
     extent_ = swapChainInfo.imageExtent;
@@ -32,4 +31,8 @@ SwapChain::SwapChain(VkDevice device, VkSwapchainCreateInfoKHR swapChainInfo) : 
             throw std::runtime_error("failed to creat swap chain image view!");
         }
     }
+}
+
+SwapChain::~SwapChain() {
+    vkDestroySwapchainKHR(device_, swapChain_, nullptr);
 }

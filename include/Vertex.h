@@ -6,8 +6,9 @@
 
 class Vertex {
 public:
+    virtual ~Vertex() {}
     virtual VkVertexInputBindingDescription bindingDescription(uint32_t binding) const = 0;
     virtual std::vector<VkVertexInputAttributeDescription> attributeDescription(uint32_t binding) const = 0;
-    virtual VkPrimitiveTopology topology() const;
+    virtual VkPrimitiveTopology topology() const = 0;
 private:
 };

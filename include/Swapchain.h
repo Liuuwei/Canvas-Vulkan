@@ -10,6 +10,7 @@
 class SwapChain {
 public:
     SwapChain(VkDevice device, VkSwapchainCreateInfoKHR swapChainInfo);
+    ~SwapChain();
     VkSwapchainKHR get() const { return swapChain_; }
 
     size_t size() const { return images_.size(); }

@@ -8,6 +8,9 @@
 
 class Triangle : public Vertex {
 public:
+    ~Triangle() override {
+        
+    }
     VkVertexInputBindingDescription bindingDescription(uint32_t binding) const override {
         VkVertexInputBindingDescription inputBinding{};
         inputBinding.binding = binding;
@@ -21,7 +24,7 @@ public:
         std::vector<VkVertexInputAttributeDescription> attributes(2);
         attributes[0].binding = binding;
         attributes[0].location = 0;
-        attributes[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
         attributes[0].offset = offsetof(Point, position_);
 
         attributes[1].binding = binding;
@@ -37,9 +40,10 @@ public:
     }
 
     struct Point {
-        glm::vec2 position_;
+        glm::vec3 position_;
         glm::vec3 color_;
     };
+
 private:
 
 };
