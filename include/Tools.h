@@ -3,11 +3,8 @@
 #include "GLFW/glfw3.h"
 #include "vulkan/vulkan_core.h"
 #include <algorithm>
-#include <cstdint>
-#include <iostream>
 #include <limits>
 #include <stdexcept>
-#include <vulkan/vulkan.h>
 
 #include <vector>
 #include <string>
@@ -15,7 +12,7 @@
 #include <optional>
 #include <fstream>
 #include <iostream>
-#include <assert.h>
+#include <cassert>
 
 struct Tools {
 
@@ -104,7 +101,7 @@ struct SwapChainSupportDetail {
 
     VkPresentModeKHR choosePresentMode() const {
         for (const auto& mode : presentModes_) {
-            if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+            if (mode == VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR) {
                 return mode;
             }
         }

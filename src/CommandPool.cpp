@@ -7,3 +7,7 @@ CommandPool::CommandPool(VkDevice device, VkCommandPoolCreateInfo commandPoolInf
         throw std::runtime_error("failed to create command pool!");
     }
 }
+
+CommandPool::~CommandPool() {
+    vkDestroyCommandPool(device_, commandPool_, nullptr);
+}

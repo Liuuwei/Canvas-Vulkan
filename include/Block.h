@@ -19,7 +19,7 @@ public:
     }
 
     std::vector<VkVertexInputAttributeDescription> attributeDescription(uint32_t binding) const override {
-        std::vector<VkVertexInputAttributeDescription> attributes(2);
+        std::vector<VkVertexInputAttributeDescription> attributes(3);
         attributes[0].binding = binding;
         attributes[0].location = 0;
         attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -28,7 +28,12 @@ public:
         attributes[1].binding = binding;
         attributes[1].location = 1;
         attributes[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributes[1].offset = offsetof(Point, texCoord_);
+        attributes[1].offset = offsetof(Point, color_);
+
+        attributes[2].binding = binding;
+        attributes[2].location = 2;
+        attributes[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributes[2].offset = offsetof(Point, texCoord_);
 
         return attributes;
     }
@@ -38,8 +43,8 @@ public:
     }
 
     struct Point {
-        Point(float x, float y, float z, float u, float v, float w) : position_(x, y, z), texCoord_(u, v, w) {}
         glm::vec3 position_;
+        glm::vec3 color_;
         glm::vec3 texCoord_;
     };
 

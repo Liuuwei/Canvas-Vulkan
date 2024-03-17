@@ -4,7 +4,7 @@ project(VulkanGame)
 
 set(CMAKE_C_COMPILER $ENV{LLVM}/bin/clang.exe)
 set(CMAKE_CXX_COMPILER $ENV{LLVM}/bin/clang++.exe)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
 include_directories($ENV{VCPKG_INCLUDE})

@@ -7,6 +7,8 @@
 class Image {
 public:
     Image(VkPhysicalDevice physicalDevice, VkDevice device);
+    Image& operator=(const Image& rhs) = default;
+    ~Image();
     
     void init();
     VkImage image() const { return image_; }

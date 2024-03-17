@@ -7,3 +7,7 @@ Semaphore::Semaphore(VkDevice device, VkSemaphoreCreateInfo createInfo) : device
         throw std::runtime_error("failed to create semaphore!");
     }
 }
+
+Semaphore::~Semaphore() {
+    vkDestroySemaphore(device_, semaphore_, nullptr);
+}

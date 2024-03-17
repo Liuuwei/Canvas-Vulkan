@@ -6,6 +6,8 @@
 class RenderPass {
 public:
     RenderPass(VkDevice device, VkRenderPassCreateInfo renderPassInfo);
+    ~RenderPass();
+
     VkRenderPass get() const { return renderPass_; }
 private:
     VkDevice device_;

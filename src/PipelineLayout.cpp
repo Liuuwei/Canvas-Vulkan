@@ -7,3 +7,7 @@ PipelineLayout::PipelineLayout(VkDevice device, VkPipelineLayoutCreateInfo layou
         throw std::runtime_error("failed to create pipeline layout!");
     }
 }
+
+PipelineLayout::~PipelineLayout() {
+    vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+}

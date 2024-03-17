@@ -5,6 +5,7 @@
 class Memory {
 public:
     Memory(VkDevice device, VkMemoryAllocateInfo memoryInfo);
+    ~Memory();
 
     VkDeviceMemory get() const { return memory_; }
 private:

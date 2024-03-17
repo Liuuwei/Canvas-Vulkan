@@ -6,6 +6,7 @@
 class FrameBuffer {
 public:
     FrameBuffer(VkDevice device, VkFramebufferCreateInfo frameBufferInfo);
+    ~FrameBuffer();
 
     VkFramebuffer get() const { return frameBuffer_; }
 private:

@@ -6,6 +6,7 @@
 class CommandPool {
 public:
     CommandPool(VkDevice device, VkCommandPoolCreateInfo commandPoolInfo);
+    ~CommandPool();
 
     VkCommandPool get() const { return commandPool_; }
 private:

@@ -6,6 +6,10 @@ Sampler::Sampler(VkDevice device) : device_(device) {
 
 }
 
+Sampler::~Sampler() {
+    vkDestroySampler(device_, sampler_, nullptr);
+}
+
 void Sampler::init() {
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;

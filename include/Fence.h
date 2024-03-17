@@ -6,6 +6,7 @@
 class Fence {
 public:
     Fence(VkDevice device, VkFenceCreateInfo createInfo);
+    ~Fence();
 
     VkFence get() const { return fence_; }
     VkFence* getPtr() { return &fence_; }

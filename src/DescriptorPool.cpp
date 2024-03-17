@@ -7,3 +7,7 @@ DescriptorPool::DescriptorPool(VkDevice device, VkDescriptorPoolCreateInfo creat
         throw std::runtime_error("Failed to create descriptor pool!");
     }
 }
+
+DescriptorPool::~DescriptorPool() {
+    vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
+}

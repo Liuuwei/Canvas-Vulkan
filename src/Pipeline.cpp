@@ -7,3 +7,7 @@ Pipeline::Pipeline(VkDevice device, VkPipelineCache pipelineCache, const std::ve
         throw std::runtime_error("failed to create graphics pipeline!");
     }
 }
+
+Pipeline::~Pipeline() {
+    vkDestroyPipeline(device_, pipeline_, nullptr);
+}

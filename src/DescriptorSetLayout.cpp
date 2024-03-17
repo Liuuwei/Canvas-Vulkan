@@ -7,3 +7,7 @@ DescriptorSetLayout::DescriptorSetLayout(VkDevice device, VkDescriptorSetLayoutC
         throw std::runtime_error("failed to create descriptor set layout!");
     }
 }
+
+DescriptorSetLayout::~DescriptorSetLayout() {
+    vkDestroyDescriptorSetLayout(device_, descriptorSetlayout_, nullptr);
+}

@@ -6,6 +6,7 @@
 class Semaphore {
 public:
     Semaphore(VkDevice device, VkSemaphoreCreateInfo createInfo);
+    ~Semaphore();
 
     VkSemaphore get() const { return semaphore_; }
     VkSemaphore* getPtr() { return &semaphore_; }

@@ -7,6 +7,7 @@ Buffer::Buffer(VkPhysicalDevice physicalDevice, VkDevice device) : physicalDevic
 }
 
 Buffer::~Buffer() {
+    vkFreeMemory(device_, memory_, nullptr);
     vkDestroyBuffer(device_, buffer_, nullptr);
 }
 

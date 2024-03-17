@@ -6,6 +6,7 @@
 class Sampler {
 public:
     Sampler(VkDevice device);
+    ~Sampler();
 
     void init();
     VkSampler sampler() const { return sampler_; }

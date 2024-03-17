@@ -7,3 +7,7 @@ RenderPass::RenderPass(VkDevice device, VkRenderPassCreateInfo renderPassInfo) :
         throw std::runtime_error("failed to create render pass!");
     }
 }
+
+RenderPass::~RenderPass() {
+    vkDestroyRenderPass(device_, renderPass_, nullptr);
+}

@@ -6,6 +6,7 @@
 class DescriptorPool {
 public:
     DescriptorPool(VkDevice device, VkDescriptorPoolCreateInfo creatInfo);
+    ~DescriptorPool();
 
     VkDescriptorPool get() const { return descriptorPool_; }
 private:

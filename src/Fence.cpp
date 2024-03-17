@@ -7,3 +7,7 @@ Fence::Fence(VkDevice device, VkFenceCreateInfo createInfo) : device_(device) {
         throw std::runtime_error("failed to create fence!");
     }
 }
+
+Fence::~Fence() {
+    vkDestroyFence(device_, fence_, nullptr);
+}

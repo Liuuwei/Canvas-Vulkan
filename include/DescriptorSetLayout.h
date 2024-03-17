@@ -6,6 +6,8 @@
 class DescriptorSetLayout {
 public:
     DescriptorSetLayout(VkDevice device, VkDescriptorSetLayoutCreateInfo layoutInfo);
+    ~DescriptorSetLayout();
+    
     VkDescriptorSetLayout get() const { return descriptorSetlayout_; }
 private:
     VkDevice device_;

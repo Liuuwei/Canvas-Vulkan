@@ -8,7 +8,7 @@
 #include "Pipeline.h"
 #include "PipelineLayout.h"
 #include "Swapchain.h"
-#include "glm/trigonometric.hpp"
+#include "Tools.h"
 #include "vulkan/vulkan_core.h"
 #include <array>
 #include <cassert>
@@ -21,6 +21,7 @@
 #include <ppltasks.h>
 #include <stdexcept>
 #include <iostream>
+#include <sys/stat.h>
 #include <unordered_set>
 #include <ktx.h>
 #define GLM_FORCE_RADIANS
@@ -28,10 +29,11 @@
 #include <glm/ext/matrix_clip_space.hpp>
 
 #include "ShaderModule.h"
-#include "Vertex.h"
-#include "Triangle.h"
+#include "Plane.h"
+#include "Line.h"
 
 Vulkan::Vulkan(const std::string& title, uint32_t width, uint32_t height) : width_(width), height_(height), title_(title) {
+    camera_ = std::make_shared<Camera>();
     initWindow();
     initVulkan();
 }
@@ -52,7 +54,26 @@ void Vulkan::initWindow() {
     glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
 
     windows_ = glfwCreateWindow(width_, height_, title_.c_str(), nullptr, nullptr);
+    // glfwSetInputMode(windows_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetWindowUserPointer(windows_, this);
+    glfwSetKeyCallback(windows_, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+        auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
+        auto camera = vulkan->camera_;
+        camera->onKey(window, key, scancode, action, mods);
+    });
+    glfwSetCursorPosCallback(windows_, [](GLFWwindow* window, double xpos, double ypos) {
+        auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
+
+        vulkan->ok_ = true;
+        vulkan->x_ = xpos;
+        vulkan->y_ = ypos;
+        
+        auto camera = vulkan->camera_;
+        camera->onMouseMovement(window, xpos, ypos);
+    });
+    glfwSetMouseButtonCallback(windows_, [](GLFWwindow* window, int button, int action, int mods) {
+
+    });
 }
 
 void Vulkan::initVulkan() {
@@ -76,7 +97,6 @@ void Vulkan::initVulkan() {
     createColorResource();
     createDepthResource();
     createFrameBuffer();
-
     createVertexBuffer();
     createIndexBuffer();
     createSyncObjects();
@@ -308,6 +328,9 @@ void Vulkan::createUniformBuffers() {
 
 void Vulkan::createSamplers() {
     sampler_ = std::make_unique<Sampler>(device_);
+    sampler_->addressModeU_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler_->addressModeV_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    sampler_->addressModeW_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     sampler_->minLod_ = 0.0f;
     sampler_->maxLod_ = skyBoxImage_->mipLevles_ - 1;
     VkPhysicalDeviceProperties properties;
@@ -318,13 +341,11 @@ void Vulkan::createSamplers() {
 }
 
 void Vulkan::createDescriptorPool() {
-    std::array<VkDescriptorPoolSize, 3> poolSizes;
+    std::array<VkDescriptorPoolSize, 2> poolSizes;
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_SAMPLER;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-    poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    poolSizes[2].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
     VkDescriptorPoolCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -402,7 +423,16 @@ void Vulkan::createDescriptorSet() {
 }
 
 void Vulkan::createVertex() {
-    vertex_ = std::make_unique<Block>();
+    vertex_ = std::make_unique<Plane>();
+    auto t = vertex_->vertices(800.0f, 600.0f);
+    vertices_ = t.first;
+    indices_ = t.second;
+
+    line_ = std::make_unique<Line>();
+    lineVertices_.resize(MAX_FRAMES_IN_FLIGHT);
+    lineIndices_.resize(MAX_FRAMES_IN_FLIGHT);  
+    lineVertexBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
+    lineIndexBuffers_.resize(MAX_FRAMES_IN_FLIGHT);  
 }
 
 void Vulkan::createGraphicsPipelines() {
@@ -423,8 +453,8 @@ void Vulkan::createGraphicsPipelines() {
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages{vertexStageInfo, fragmentStageInfo};
     
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    auto bindingDescription = vertex_->bindingDescription(0);
-    auto attributeDescription = vertex_->attributeDescription(0);
+    auto bindingDescription = line_->bindingDescription(0);
+    auto attributeDescription = line_->attributeDescription(0);
 
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount = 1;
@@ -434,7 +464,7 @@ void Vulkan::createGraphicsPipelines() {
 
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
     inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssemblyInfo.topology = vertex_->topology();
+    inputAssemblyInfo.topology = line_->topology();
 
     VkPipelineViewportStateCreateInfo viewportInfo{};
     viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -463,7 +493,14 @@ void Vulkan::createGraphicsPipelines() {
     depthStencilInfo.maxDepthBounds = 1.0f;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachmentInfo{};
+    colorBlendAttachmentInfo.blendEnable = VK_TRUE;
     colorBlendAttachmentInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachmentInfo.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    colorBlendAttachmentInfo.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    colorBlendAttachmentInfo.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachmentInfo.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachmentInfo.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachmentInfo.alphaBlendOp = VK_BLEND_OP_ADD;
     
     VkPipelineColorBlendStateCreateInfo colorBlendInfo{};
     colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -593,59 +630,121 @@ void Vulkan::createCommandBuffers() {
 }
 
 void Vulkan::createVertexBuffer() {
-    VkDeviceSize size = sizeof(vertices_[0]) * vertices_.size();
+    // VkDeviceSize size = sizeof(float) * vertices_.size();
 
-    vertexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
-    vertexBuffer_->size_ = size;
-    vertexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    vertexBuffer_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    vertexBuffer_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-    vertexBuffer_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-    vertexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    vertexBuffer_->init();
+    // vertexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
+    // vertexBuffer_->size_ = size;
+    // vertexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    // vertexBuffer_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+    // vertexBuffer_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+    // vertexBuffer_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+    // vertexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    // vertexBuffer_->init();
 
-    std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
-    staginBuffer->size_ = size;
-    staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-    staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-    staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    staginBuffer->init();
+    // std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+    // staginBuffer->size_ = size;
+    // staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    // staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+    // staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+    // staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+    // staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    // staginBuffer->init();
 
-    auto data = staginBuffer->map(size);
-    memcpy(data, vertices_.data(), size);
-    staginBuffer->unMap();
+    // auto data = staginBuffer->map(size);
+    // memcpy(data, vertices_.data(), size);
+    // staginBuffer->unMap();
 
-    copyBuffer(staginBuffer->buffer(), vertexBuffer_->buffer(), size);
+    // copyBuffer(staginBuffer->buffer(), vertexBuffer_->buffer(), size);
+
+    for (size_t i = 0; i < lineVertexBuffers_.size(); i++) {
+        VkDeviceSize size = sizeof(float) * lineVertices_[i].size();
+
+        lineVertexBuffers_[i] = std::make_unique<Buffer>(physicalDevice_, device_);
+        if (size == 0) {
+            continue;
+        }
+        lineVertexBuffers_[i]->size_ = size;
+        lineVertexBuffers_[i]->usage_ = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        lineVertexBuffers_[i]->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        lineVertexBuffers_[i]->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        lineVertexBuffers_[i]->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        lineVertexBuffers_[i]->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        lineVertexBuffers_[i]->init();
+
+        std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        staginBuffer->size_ = size;
+        staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        staginBuffer->init();
+
+        auto data = staginBuffer->map(size);
+        memcpy(data, lineVertices_[i].data(), size);
+        staginBuffer->unMap();
+
+        copyBuffer(staginBuffer->buffer(), lineVertexBuffers_[i]->buffer(), size);
+    }
 }
 
 void Vulkan::createIndexBuffer() {
-    VkDeviceSize size = sizeof(indices_[0]) * indices_.size();
+    // VkDeviceSize size = sizeof(indices_[0]) * indices_.size();
 
-    indexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
-    indexBuffer_->size_ = size;
-    indexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    indexBuffer_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    indexBuffer_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-    indexBuffer_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-    indexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    indexBuffer_->init();
+    // indexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
+    // indexBuffer_->size_ = size;
+    // indexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    // indexBuffer_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+    // indexBuffer_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+    // indexBuffer_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+    // indexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    // indexBuffer_->init();
 
-    std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
-    staginBuffer->size_ = size;
-    staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-    staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-    staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    staginBuffer->init();
+    // std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+    // staginBuffer->size_ = size;
+    // staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    // staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+    // staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+    // staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+    // staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    // staginBuffer->init();
 
-    auto data = staginBuffer->map(size);
-    memcpy(data, indices_.data(), size);
-    staginBuffer->unMap();
+    // auto data = staginBuffer->map(size);
+    // memcpy(data, indices_.data(), size);
+    // staginBuffer->unMap();
 
-    copyBuffer(staginBuffer->buffer(), indexBuffer_->buffer(), size);
+    // copyBuffer(staginBuffer->buffer(), indexBuffer_->buffer(), size);
+    
+    for (size_t i = 0; i < lineVertexBuffers_.size(); i++) {
+        VkDeviceSize size = sizeof(float) * lineIndices_[i].size();
+
+        lineIndexBuffers_[i] = std::make_unique<Buffer>(physicalDevice_, device_);
+        if (size == 0) {
+            continue;
+        }
+        lineIndexBuffers_[i]->size_ = size;
+        lineIndexBuffers_[i]->usage_ = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        lineIndexBuffers_[i]->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        lineIndexBuffers_[i]->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        lineIndexBuffers_[i]->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        lineIndexBuffers_[i]->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        lineIndexBuffers_[i]->init();
+
+        std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        staginBuffer->size_ = size;
+        staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        staginBuffer->init();
+
+        auto data = staginBuffer->map(size);
+        memcpy(data, lineIndices_[i].data(), size);
+        staginBuffer->unMap();
+
+        copyBuffer(staginBuffer->buffer(), lineIndexBuffers_[i]->buffer(), size);
+    }
 }
 
 void Vulkan::createSyncObjects() {
@@ -691,11 +790,12 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
 
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline_->get());
 
-        std::vector<VkBuffer> vertexBuffer = {vertexBuffer_->buffer()};
+        // std::vector<VkBuffer> vertexBuffer = {vertexBuffer_->buffer()};
+        std::vector<VkBuffer> vertexBuffer = {lineVertexBuffers_[currentFrame_]->buffer()};
         VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffer.data(), offsets);
 
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer_->buffer(), 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(commandBuffer, lineIndexBuffers_[currentFrame_]->buffer(), 0, VK_INDEX_TYPE_UINT32);
 
         VkViewport viewport{};
         viewport.x = 0.0f;
@@ -713,7 +813,7 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
         std::array<VkDescriptorSet, 1> descriptorSets{descriptorSets_[currentFrame_]};
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_->get(), 0, static_cast<uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices_.size()), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(lineIndices_[currentFrame_].size()), 1, 0, 0, 0);
     
     vkCmdEndRenderPass(commandBuffer);
 
@@ -723,7 +823,14 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
 }
 
 void Vulkan::draw() {
+    timer_.tick();
+    camera_->setDeltaTime(timer_.delta());
+
     vkWaitForFences(device_, 1, inFlightFences_[currentFrame_]->getPtr(), VK_TRUE, UINT64_MAX);
+
+    if (lineVertices_[currentFrame_].size() == 0 && ok_ == false) {
+        return ;
+    }
 
     uint32_t imageIndex = 0;
     vkAcquireNextImageKHR(device_, swapChain_->get(), UINT64_MAX, imageAvaiableSemaphores_[currentFrame_]->get(), VK_NULL_HANDLE, &imageIndex);
@@ -879,12 +986,82 @@ void Vulkan::updateDrawAssets() {
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
     UniformBufferObject ubo{};
-    ubo.model_ = glm::rotate(glm::mat4(1.0f), time * glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    ubo.view_ = glm::lookAt(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f, 0.0f, -5.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    ubo.proj_ = glm::perspective(glm::radians(45.0f), swapChain_->extent().width / static_cast<float>(swapChain_->extent().height), 0.1f, 1000.0f);
+    // ubo.model_ = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -10.0f));
+    // ubo.view_ = camera_->getView();
+    // ubo.proj_ = camera_->getProj(45.0f, swapChain_->extent().width, swapChain_->extent().height, 0.001f, 1000.0f);
+    ubo.proj_ = glm::ortho(-swapChain_->width() / 2.0f, swapChain_->width() / 2.0f, -swapChain_->height() / 2.0f, swapChain_->height() / 2.0f);
 
     auto data = uniformBuffers_[currentFrame_]->map(sizeof(ubo));    
     memcpy(data, &ubo, sizeof(ubo));
+
+    {
+        if (ok_ == false) {
+            return ;
+        }
+        ok_ = false;
+        auto& vertices = lineVertices_[currentFrame_];
+        auto& indices = lineIndices_[currentFrame_];
+        auto& vertexBuffer = lineVertexBuffers_[currentFrame_];
+        auto& indexBuffer = lineIndexBuffers_[currentFrame_];
+        vertices.push_back(static_cast<float>(x_ - swapChain_->width() / 2.0f));
+        vertices.push_back(-static_cast<float>(y_ - swapChain_->height() / 2.0f));
+        vertices.push_back(1.0f);
+        vertices.push_back(1.0f);
+        vertices.push_back(1.0f);
+        vertices.push_back(1.0f);
+        vertices.push_back(1.0f);
+        indices.push_back(indices.size());    
+        
+        VkDeviceSize size = sizeof(float) * vertices.size();
+        vertexBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        vertexBuffer->size_ = size;
+        vertexBuffer->usage_ = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        vertexBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        vertexBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        vertexBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        vertexBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        vertexBuffer->init();
+
+        std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        staginBuffer->size_ = size;
+        staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        staginBuffer->init();
+
+        auto data = staginBuffer->map(size);
+        memcpy(data, vertices.data(), size);
+        staginBuffer->unMap();
+
+        copyBuffer(staginBuffer->buffer(), vertexBuffer->buffer(), size);
+
+        size = sizeof(uint32_t) * indices.size();
+        indexBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        indexBuffer->size_ = size;
+        indexBuffer->usage_ = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        indexBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        indexBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        indexBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        indexBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        indexBuffer->init();
+
+        staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        staginBuffer->size_ = size;
+        staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        staginBuffer->init();
+
+        data = staginBuffer->map(size);
+        memcpy(data, indices.data(), size);
+        staginBuffer->unMap();
+
+        copyBuffer(staginBuffer->buffer(), indexBuffer->buffer(), size);
+    }
 }   
 
 void Vulkan::recreateSwapChain() {

@@ -7,3 +7,7 @@ Memory::Memory(VkDevice device, VkMemoryAllocateInfo memoryInfo) : device_(devic
         throw std::runtime_error("failed to allocate device memory!");
     }
 }
+
+Memory::~Memory() {
+    vkFreeMemory(device_, memory_, nullptr);
+}

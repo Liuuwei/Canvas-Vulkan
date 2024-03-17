@@ -18,9 +18,12 @@ ShaderModule.cpp
 SwapChain.cpp 
 Vertex.cpp 
 Sampler.cpp
+Camera.cpp
+Timer.cpp
+Font.cpp
 )
 
-target_link_libraries(MyVulkan vulkan-1 glfw3dll ktx)
+target_link_libraries(MyVulkan vulkan-1 glfw3dll ktx freetype)
 
 add_executable(Main main.cpp)
-target_link_libraries(Main MyVulkan vulkan-1 glfw3dll ktx)
+target_link_libraries(Main MyVulkan vulkan-1 glfw3dll ktx freetype)

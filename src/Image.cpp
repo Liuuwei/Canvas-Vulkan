@@ -6,6 +6,12 @@ Image::Image(VkPhysicalDevice physicalDevice, VkDevice device) : physicalDevice_
     
 }
 
+Image::~Image() {
+    vkDestroyImageView(device_, view(), nullptr);
+    vkFreeMemory(device_, memory_, nullptr);
+    vkDestroyImage(device_, image_, nullptr);
+}
+
 void Image::init() {
     VkImageCreateInfo imageInfo{};
     VkMemoryAllocateInfo memoryInfo{};

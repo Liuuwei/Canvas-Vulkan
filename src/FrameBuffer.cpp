@@ -7,3 +7,7 @@ FrameBuffer::FrameBuffer(VkDevice device, VkFramebufferCreateInfo frameBufferInf
         throw std::runtime_error("failed to create frame buffer!");
     }
 }
+
+FrameBuffer::~FrameBuffer() {
+    vkDestroyFramebuffer(device_, frameBuffer_, nullptr);
+}

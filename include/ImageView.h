@@ -5,6 +5,7 @@
 class ImageView {
 public:
     ImageView(VkDevice device, VkImageViewCreateInfo viewInfo);
+    ~ImageView();
 
     VkImageView get() const { return imageView_; }
 private:

@@ -3,6 +3,7 @@
 #include "vulkan/vulkan_core.h"
 #include <cstdint>
 #include <vulkan/vulkan.h>
+#include "Tools.h"
 
 class Buffer {
 public:
@@ -18,7 +19,7 @@ public:
             return data_;
         }
         
-        vkMapMemory(device_, memory_, 0, size, 0, &data_);
+        VK_CHECK(vkMapMemory(device_, memory_, 0, size, 0, &data_));
         return data_;
     }
 
@@ -30,8 +31,8 @@ public:
 private:
     VkPhysicalDevice physicalDevice_;
     VkDevice device_;
-    VkBuffer buffer_;
-    VkDeviceMemory memory_;
+    VkBuffer buffer_ = VK_NULL_HANDLE;
+    VkDeviceMemory memory_ = VK_NULL_HANDLE;
     void* data_ = nullptr;
     
 public:

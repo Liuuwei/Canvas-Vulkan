@@ -8,7 +8,6 @@
 #include "Sampler.h"
 #include "Semaphore.h"
 #include "Swapchain.h"
-#include "Triangle.h"
 #include "Vertex.h"
 #include "ktx.h"
 #include "vulkan/vulkan_core.h"
@@ -32,6 +31,10 @@
 #include "DescriptorPool.h"
 #include "Block.h"
 #include "Sampler.h"
+#include "Camera.h"
+#include "Timer.h"
+#include "Font.h"
+#include "Plane.h"
 
 class Vulkan {
 public:
@@ -69,6 +72,7 @@ private:
     void loadAssets();
     void updateDrawAssets();
     void recreateSwapChain();
+    void loadChars();
 
 private:
     bool checkValidationLayerSupport() ;
@@ -137,11 +141,21 @@ private:
     const std::vector<const char*> validationLayers_ = {"VK_LAYER_KHRONOS_validation"};
     const std::vector<const char*> deviceExtensions_ = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-    std::unique_ptr<Vertex> vertex_;
 
     uint32_t currentFrame_ = 0;
 
     std::vector<std::unique_ptr<Buffer>> uniformBuffers_;
+
+    std::shared_ptr<Camera> camera_;
+    Timer timer_;
+
+    struct Character {
+        Character() {}
+        std::unique_ptr<Image> image_ = nullptr;
+        uint32_t width_ = 0;
+        uint32_t height_ = 0;
+        uint32_t x_ = 0;
+    };
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 
@@ -159,33 +173,19 @@ private:
 
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
-    float x_ = 0.0f;
-    float y_ = 0.0f;
-    float z_ =  0.0f;
-    float radius_ = 0.5f;
+    std::unique_ptr<Plane> vertex_;
+    std::vector<float> vertices_;
+    std::vector<uint32_t> indices_;
 
-    std::vector<Block::Point> vertices_ = {
-       {-0.5f, 0.5f, 0.5f, -1.0f, 1.0f, 1.0f}, 
-       {0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 1.0f}, 
-       {-0.5f, -0.5f, 0.5f, -1.0f, -1.0f, 1.0f}, 
-       {0.5f, -0.5f, 0.5f, 1.0f, -1.0f, 1.0f}, 
+    std::unique_ptr<Vertex> line_;
+    std::vector<std::vector<float>> lineVertices_;
+    std::vector<std::vector<uint32_t>> lineIndices_;
+    std::vector<std::unique_ptr<Buffer>> lineVertexBuffers_;
+    std::vector<std::unique_ptr<Buffer>> lineIndexBuffers_;
 
-       {-0.5f, 0.5f, -0.5f, -1.0f, 1.0f, -1.0f}, 
-       {0.5f, 0.5f, -0.5f, 1.0f, 1.0f, -1.0f}, 
-       {-0.5f, -0.5f, -0.5f, -1.0f, -1.0f, -1.0f}, 
-       {0.5f, -0.5f, -0.5f, 1.0f, -1.0f, -1.0f}, 
-    };
-
-    std::vector<uint32_t> indices_ = {
-        0, 1, 2, 2, 1, 3, 
-        5, 4, 7, 7, 4, 6, 
-
-        4, 0, 6, 6, 0, 2, 
-        1, 5, 3, 3, 5, 7, 
-
-        4, 5, 0, 0, 5, 1, 
-        2, 3, 6, 6, 3, 7
-    };
+    float x_;
+    float y_;
+    bool ok_;
 
     struct UniformBufferObject {
         alignas(16) glm::mat4 model_;
