@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <ppltasks.h>
 #include <stdexcept>
@@ -58,21 +59,51 @@ void Vulkan::initWindow() {
     glfwSetWindowUserPointer(windows_, this);
     glfwSetKeyCallback(windows_, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
+
+        if (action == GLFW_PRESS) {
+            switch (key) {
+            case GLFW_KEY_0:
+                vulkan->color_ = Color::Write;
+                break;
+            case GLFW_KEY_1:
+                vulkan->color_ = Color::Red;
+                break;
+            case GLFW_KEY_2:
+                vulkan->color_ = Color::Green;
+                break;
+            case GLFW_KEY_3:
+                vulkan->color_ = Color::Blue;
+                break; 
+            }
+        }
+
         auto camera = vulkan->camera_;
         camera->onKey(window, key, scancode, action, mods);
     });
     glfwSetCursorPosCallback(windows_, [](GLFWwindow* window, double xpos, double ypos) {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
 
-        vulkan->ok_ = true;
-        vulkan->x_ = xpos;
-        vulkan->y_ = ypos;
+        if (vulkan->LeftButton_) {
+            vulkan->ok_ = true;
+            vulkan->x_ = xpos;
+            vulkan->y_ = ypos;
+        }
         
         auto camera = vulkan->camera_;
         camera->onMouseMovement(window, xpos, ypos);
     });
     glfwSetMouseButtonCallback(windows_, [](GLFWwindow* window, int button, int action, int mods) {
-
+        auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
+        
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            if (action == GLFW_PRESS) {
+                vulkan->LeftButton_ = true;
+                vulkan->LeftButtonOnce_ = true;
+            } else {
+                vulkan->LeftButton_ = false;
+                vulkan->LeftButtonOnce_ = false;
+            }
+        }
     });
 }
 
@@ -158,6 +189,11 @@ void Vulkan::pickPhysicalDevice() {
     vkEnumeratePhysicalDevices(instance_, &count, physicalDevices.data());
 
     for (const auto& device : physicalDevices) {
+        VkPhysicalDeviceProperties pro;
+        vkGetPhysicalDeviceProperties(device, &pro);
+        if (pro.deviceName[0] == 'A') {
+            continue;
+        }
         if (deviceSuitable(device)) {
             physicalDevice_ = device;
             msaaSamples_ = getMaxUsableSampleCount();
@@ -424,15 +460,17 @@ void Vulkan::createDescriptorSet() {
 
 void Vulkan::createVertex() {
     vertex_ = std::make_unique<Plane>();
-    auto t = vertex_->vertices(800.0f, 600.0f);
-    vertices_ = t.first;
-    indices_ = t.second;
+    // auto t = vertex_->vertices(800.0f, 600.0f);
+    // vertices_ = t.first;
+    // indices_ = t.second;
 
     line_ = std::make_unique<Line>();
     lineVertices_.resize(MAX_FRAMES_IN_FLIGHT);
     lineIndices_.resize(MAX_FRAMES_IN_FLIGHT);  
     lineVertexBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
     lineIndexBuffers_.resize(MAX_FRAMES_IN_FLIGHT);  
+
+    lineOffsets_.resize(MAX_FRAMES_IN_FLIGHT);
 }
 
 void Vulkan::createGraphicsPipelines() {
@@ -788,7 +826,7 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline_->get());
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline_->pipeline());
 
         // std::vector<VkBuffer> vertexBuffer = {vertexBuffer_->buffer()};
         std::vector<VkBuffer> vertexBuffer = {lineVertexBuffers_[currentFrame_]->buffer()};
@@ -813,7 +851,9 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
         std::array<VkDescriptorSet, 1> descriptorSets{descriptorSets_[currentFrame_]};
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_->get(), 0, static_cast<uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(lineIndices_[currentFrame_].size()), 1, 0, 0, 0);
+        for (auto p : lineOffsets_[currentFrame_]) {
+            vkCmdDrawIndexed(commandBuffer, p.second - p.first, 1, p.first, 0, 0);
+        }
     
     vkCmdEndRenderPass(commandBuffer);
 
@@ -1003,14 +1043,29 @@ void Vulkan::updateDrawAssets() {
         auto& indices = lineIndices_[currentFrame_];
         auto& vertexBuffer = lineVertexBuffers_[currentFrame_];
         auto& indexBuffer = lineIndexBuffers_[currentFrame_];
+        auto& indexOffset = lineOffsets_[currentFrame_];
+        int prevFrame = currentFrame_ - 1;
+        if (prevFrame < 0) {
+            prevFrame = MAX_FRAMES_IN_FLIGHT - 1;
+        }
+        vertices = lineVertices_[prevFrame];
+        indices = lineIndices_[prevFrame];
+        indexOffset = lineOffsets_[prevFrame];
+        if (LeftButtonOnce_) {
+            LeftButtonOnce_ = false;
+            indexOffset.push_back({indices.size(), 0});
+        }
         vertices.push_back(static_cast<float>(x_ - swapChain_->width() / 2.0f));
         vertices.push_back(-static_cast<float>(y_ - swapChain_->height() / 2.0f));
-        vertices.push_back(1.0f);
-        vertices.push_back(1.0f);
-        vertices.push_back(1.0f);
+        
+        fillColor(vertices);
+
         vertices.push_back(1.0f);
         vertices.push_back(1.0f);
         indices.push_back(indices.size());    
+        if (!indexOffset.empty()) {
+            indexOffset.back().second = indices.size();
+        }
         
         VkDeviceSize size = sizeof(float) * vertices.size();
         vertexBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
@@ -1237,6 +1292,72 @@ void Vulkan::endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue)
     vkQueueWaitIdle(queue);
 
     vkFreeCommandBuffers(device_, commandPool_->get(), 1, &commandBuffer);
+}
+
+void Vulkan::fillColor(std::vector<float>& vertices) {
+    switch (color_) {
+    case Color::Write:
+        vertices.push_back(1.0f);
+        vertices.push_back(1.0f);
+        vertices.push_back(1.0f);
+        break;
+    case Color::Red:
+        vertices.push_back(1.0f);
+        vertices.push_back(0.0f);
+        vertices.push_back(0.0f);
+        break;
+    case Color::Green:
+        vertices.push_back(0.0f);
+        vertices.push_back(1.0f);
+        vertices.push_back(0.0f);
+        break;
+    case Color::Blue:
+        vertices.push_back(0.0f);
+        vertices.push_back(0.0f);
+        vertices.push_back(1.0f);
+        break;
+    }
+}
+
+void Vulkan::processNetWork(const std::string& msg) {
+    auto [extent, position] = parseMsg(msg);
+    position.first = position.first / extent.first * swapChain_->width();
+    position.second = position.second / extent.second * swapChain_->height();
+
+    ok_ = true;
+    x_ = position.first;
+    y_ = position.second;
+}
+
+std::pair<std::pair<float, float>, std::pair<float, float>> Vulkan::parseMsg(const std::string& msg) {
+    float width = 0, height = 0, x = 0, y = 0;
+    size_t i = 0;
+    for (; i < msg.size(); i++) {
+        if (msg[i] == '-') {
+            break;
+        }
+        width = width * 10 + msg[i] - '0';
+    }
+    for (; i < msg.size(); i++) {
+        if (msg[i] == '-') {
+            break;
+        }
+        height = height * 10 + msg[i] - '0';
+    }
+    for (; i < msg.size(); i++) {
+        if (msg[i] == '-') {
+            break;
+        }
+        x = x * 10 + msg[i] - '0';
+    }
+    for (; i < msg.size(); i++) {
+        if (msg[i] == '-') {
+            break;
+        }
+        y = y * 10 + msg[i] - '0';
+    }
+
+    return {{width, height}, {x, y}};
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL Vulkan::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 

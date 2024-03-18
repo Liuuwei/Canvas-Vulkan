@@ -13,6 +13,7 @@
 #include "vulkan/vulkan_core.h"
 #include <cstdint>
 #include <functional>
+#include <utility>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -86,6 +87,9 @@ private:
     void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) ;
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue);
+    void fillColor(std::vector<float>& vertices);
+    void processNetWork(const std::string& msg);
+    std::pair<std::pair<float, float>, std::pair<float, float>> parseMsg(const std::string& msg);
     
     GLFWwindow* windows_;
     uint32_t width_;
@@ -182,10 +186,22 @@ private:
     std::vector<std::vector<uint32_t>> lineIndices_;
     std::vector<std::unique_ptr<Buffer>> lineVertexBuffers_;
     std::vector<std::unique_ptr<Buffer>> lineIndexBuffers_;
+    std::vector<std::vector<std::pair<uint32_t, uint32_t>>> lineOffsets_;
+    bool LeftButton_ = false;
+    bool LeftButtonOnce_ = false;
 
     float x_;
     float y_;
-    bool ok_;
+    bool ok_ = false;
+    
+    enum Color {
+        Write, 
+        Red, 
+        Green, 
+        Blue, 
+    };
+
+    Color color_ = Write;
 
     struct UniformBufferObject {
         alignas(16) glm::mat4 model_;
