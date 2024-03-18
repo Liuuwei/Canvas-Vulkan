@@ -13,9 +13,11 @@
 #include <array>
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -94,12 +96,13 @@ void Vulkan::initWindow() {
     });
     glfwSetMouseButtonCallback(windows_, [](GLFWwindow* window, int button, int action, int mods) {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
-        
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
             if (action == GLFW_PRESS) {
+                glfwGetCursorPos(window, &vulkan->x_, &vulkan->y_);
                 vulkan->LeftButton_ = true;
                 vulkan->LeftButtonOnce_ = true;
             } else {
+                vulkan->ok_ = false;
                 vulkan->LeftButton_ = false;
                 vulkan->LeftButtonOnce_ = false;
             }
@@ -851,9 +854,18 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
         std::array<VkDescriptorSet, 1> descriptorSets{descriptorSets_[currentFrame_]};
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_->get(), 0, static_cast<uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
 
+        // std::cout << "------indices------" << std::endl;
         for (auto p : lineOffsets_[currentFrame_]) {
+            // std::cout << p.first << "," << p.second - p.first << "|";
             vkCmdDrawIndexed(commandBuffer, p.second - p.first, 1, p.first, 0, 0);
         }
+        // std::cout << std::endl;
+        // std::cout << "------vertices------" << std::endl;
+        // for (size_t i = 0; i < lineVertices_[currentFrame_].size(); i += 7) {
+            // std::cout << lineVertices_[currentFrame_][i] << "," << lineVertices_[currentFrame_][i + 1] << "|";
+        // }
+        // std::cout << std::endl;
+        // std::cout << "------times------" << std::endl << times_ << std::endl;
     
     vkCmdEndRenderPass(commandBuffer);
 
@@ -1033,9 +1045,8 @@ void Vulkan::updateDrawAssets() {
 
     auto data = uniformBuffers_[currentFrame_]->map(sizeof(ubo));    
     memcpy(data, &ubo, sizeof(ubo));
-
-    {
-        if (ok_ == false) {
+    {   
+        if (ok_ == false || LeftButton_ == false) {
             return ;
         }
         ok_ = false;
@@ -1048,16 +1059,21 @@ void Vulkan::updateDrawAssets() {
         if (prevFrame < 0) {
             prevFrame = MAX_FRAMES_IN_FLIGHT - 1;
         }
-        vertices = lineVertices_[prevFrame];
-        indices = lineIndices_[prevFrame];
-        indexOffset = lineOffsets_[prevFrame];
+        if (lineVertices_[prevFrame].size() > vertices.size()) {
+            vertices = lineVertices_[prevFrame];
+            indices = lineIndices_[prevFrame];
+            indexOffset = lineOffsets_[prevFrame];
+        }
+        // if (lineIndices_[prevFrame].size() > indices.size()) indices = lineIndices_[prevFrame];
+        // if (lineOffsets_[prevFrame].size() > indexOffset.size()) indexOffset = lineOffsets_[prevFrame];
         if (LeftButtonOnce_) {
+            times_++;
             LeftButtonOnce_ = false;
             indexOffset.push_back({indices.size(), 0});
         }
         vertices.push_back(static_cast<float>(x_ - swapChain_->width() / 2.0f));
         vertices.push_back(-static_cast<float>(y_ - swapChain_->height() / 2.0f));
-        
+
         fillColor(vertices);
 
         vertices.push_back(1.0f);

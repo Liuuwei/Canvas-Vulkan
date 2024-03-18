@@ -190,10 +190,12 @@ private:
     bool LeftButton_ = false;
     bool LeftButtonOnce_ = false;
 
-    float x_;
-    float y_;
+    double x_;
+    double y_;
     bool ok_ = false;
     
+    int times_ = 0;
+
     enum Color {
         Write, 
         Red, 
