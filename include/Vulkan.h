@@ -9,7 +9,6 @@
 #include "Semaphore.h"
 #include "Swapchain.h"
 #include "Vertex.h"
-#include "ktx.h"
 #include "vulkan/vulkan_core.h"
 #include <cstdint>
 #include <functional>
@@ -37,11 +36,18 @@
 #include "Font.h"
 #include "Plane.h"
 
+#include "TcpConnection.h"
+
 class Vulkan {
 public:
     Vulkan(const std::string& title, uint32_t width, uint32_t height);
 
     void run();
+    void pollEvents();
+    void draw();
+    void processNetWork(const std::string& msg);
+    std::shared_ptr<TcpConnection> tcpConnection_;
+    GLFWwindow* windows_;
 private:
     void initWindow();
     void initVulkan();
@@ -69,7 +75,6 @@ private:
     void createIndexBuffer();
     void createSyncObjects();
     void recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-    void draw();
     void loadAssets();
     void updateDrawAssets();
     void recreateSwapChain();
@@ -88,10 +93,8 @@ private:
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue);
     void fillColor(std::vector<float>& vertices);
-    void processNetWork(const std::string& msg);
     std::pair<std::pair<float, float>, std::pair<float, float>> parseMsg(const std::string& msg);
     
-    GLFWwindow* windows_;
     uint32_t width_;
     uint32_t height_;
     std::string title_;
@@ -128,16 +131,12 @@ private:
     std::unique_ptr<CommandPool> commandPool_;
     std::vector<std::unique_ptr<CommandBuffer>> commandBuffers_;
 
-    std::unique_ptr<Buffer> vertexBuffer_;
-    std::unique_ptr<Buffer> indexBuffer_;
+    std::unique_ptr<myVK::Buffer> vertexBuffer_;
+    std::unique_ptr<myVK::Buffer> indexBuffer_;
 
     std::vector<std::unique_ptr<Fence>> inFlightFences_;
     std::vector<std::unique_ptr<Semaphore>> imageAvaiableSemaphores_;
     std::vector<std::unique_ptr<Semaphore>> renderFinishSemaphores_;
-
-    const std::string skyBoxPath_ = "../textures/skybox.ktx";
-    ktxTexture* skyBoxTexture_;
-    std::unique_ptr<Image> skyBoxImage_;
 
     Tools::QueueFamilyIndices queueFamilies_;
     VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
@@ -148,7 +147,7 @@ private:
 
     uint32_t currentFrame_ = 0;
 
-    std::vector<std::unique_ptr<Buffer>> uniformBuffers_;
+    std::vector<std::unique_ptr<myVK::Buffer>> uniformBuffers_;
 
     std::shared_ptr<Camera> camera_;
     Timer timer_;
@@ -184,11 +183,12 @@ private:
     std::unique_ptr<Vertex> line_;
     std::vector<std::vector<float>> lineVertices_;
     std::vector<std::vector<uint32_t>> lineIndices_;
-    std::vector<std::unique_ptr<Buffer>> lineVertexBuffers_;
-    std::vector<std::unique_ptr<Buffer>> lineIndexBuffers_;
+    std::vector<std::unique_ptr<myVK::Buffer>> lineVertexBuffers_;
+    std::vector<std::unique_ptr<myVK::Buffer>> lineIndexBuffers_;
     std::vector<std::vector<std::pair<uint32_t, uint32_t>>> lineOffsets_;
     bool LeftButton_ = false;
     bool LeftButtonOnce_ = false;
+
 
     float x_;
     float y_;

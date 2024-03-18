@@ -19,9 +19,9 @@
 #include <cstring>
 #include <functional>
 #include <memory>
-#include <ppltasks.h>
 #include <stdexcept>
 #include <iostream>
+#include <string>
 #include <sys/stat.h>
 #include <unordered_set>
 #include <ktx.h>
@@ -84,9 +84,11 @@ void Vulkan::initWindow() {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
 
         if (vulkan->LeftButton_) {
-            vulkan->ok_ = true;
-            vulkan->x_ = xpos;
-            vulkan->y_ = ypos;
+            std::string msg = "m" + std::to_string(static_cast<int32_t>(vulkan->swapChain_->width())) + "-"
+                                + std::to_string(static_cast<int32_t>(vulkan->swapChain_->height())) + "-"
+                                + std::to_string(static_cast<int32_t>(xpos)) + "-"
+                                + std::to_string(static_cast<int32_t>(ypos)) + "\r\n\r\n";
+            vulkan->tcpConnection_->send(msg);
         }
         
         auto camera = vulkan->camera_;
@@ -96,13 +98,13 @@ void Vulkan::initWindow() {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
         
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            std::string msg;
             if (action == GLFW_PRESS) {
-                vulkan->LeftButton_ = true;
-                vulkan->LeftButtonOnce_ = true;
+                msg = "lp\r\n\r\n";
             } else {
-                vulkan->LeftButton_ = false;
-                vulkan->LeftButtonOnce_ = false;
+                msg = "lr\r\n\r\n";
             }
+            vulkan->tcpConnection_->send(msg);
         }
     });
 }
@@ -221,7 +223,6 @@ void Vulkan::createLogicDevice() {
 
     VkDeviceCreateInfo deviceInfo{};
     VkPhysicalDeviceFeatures features{};
-    features.sparseBinding = VK_TRUE;
     features.samplerAnisotropy = VK_TRUE;
     deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceInfo.queueCreateInfoCount = queueInfos.size();
@@ -349,7 +350,7 @@ void Vulkan::createUniformBuffers() {
     auto size = sizeof(UniformBufferObject);
 
     for (size_t i = 0; i < uniformBuffers_.size(); i++) {
-        uniformBuffers_[i] = std::make_unique<Buffer>(physicalDevice_, device_);
+        uniformBuffers_[i] = std::make_unique<myVK::Buffer>(physicalDevice_, device_);
         uniformBuffers_[i]->size_ = size;
         uniformBuffers_[i]->usage_ = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
         uniformBuffers_[i]->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
@@ -368,7 +369,7 @@ void Vulkan::createSamplers() {
     sampler_->addressModeV_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     sampler_->addressModeW_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     sampler_->minLod_ = 0.0f;
-    sampler_->maxLod_ = skyBoxImage_->mipLevles_ - 1;
+    sampler_->maxLod_ = 1.0f;
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
     sampler_->anisotropyEnable_ = VK_TRUE;
@@ -377,11 +378,9 @@ void Vulkan::createSamplers() {
 }
 
 void Vulkan::createDescriptorPool() {
-    std::array<VkDescriptorPoolSize, 2> poolSizes;
+    std::array<VkDescriptorPoolSize, 1> poolSizes;
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
     VkDescriptorPoolCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -393,18 +392,13 @@ void Vulkan::createDescriptorPool() {
 }
 
 void Vulkan::createDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding uboBinding{}, samplerBinding{};
+    VkDescriptorSetLayoutBinding uboBinding{};
     uboBinding.binding = 0;
     uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     uboBinding.descriptorCount = 1;
     uboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-    samplerBinding.binding = 1;
-    samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    samplerBinding.descriptorCount = 1;
-    samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboBinding, samplerBinding};
+    std::array<VkDescriptorSetLayoutBinding, 1> bindings = {uboBinding};
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
@@ -433,12 +427,7 @@ void Vulkan::createDescriptorSet() {
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
 
-        VkDescriptorImageInfo samplerInfo{};
-        samplerInfo.imageView = skyBoxImage_->view();
-        samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        samplerInfo.sampler = sampler_->sampler();
-
-        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets_[i];
         descriptorWrites[0].dstBinding = 0;
@@ -446,13 +435,6 @@ void Vulkan::createDescriptorSet() {
         descriptorWrites[0].descriptorCount = 1;
         descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[1].dstSet = descriptorSets_[i];
-        descriptorWrites[1].dstBinding = 1;
-        descriptorWrites[1].descriptorCount = 1;
-        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrites[1].pImageInfo = &samplerInfo;
 
         vkUpdateDescriptorSets(device_, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
@@ -697,7 +679,7 @@ void Vulkan::createVertexBuffer() {
     for (size_t i = 0; i < lineVertexBuffers_.size(); i++) {
         VkDeviceSize size = sizeof(float) * lineVertices_[i].size();
 
-        lineVertexBuffers_[i] = std::make_unique<Buffer>(physicalDevice_, device_);
+        lineVertexBuffers_[i] = std::make_unique<myVK::Buffer>(physicalDevice_, device_);
         if (size == 0) {
             continue;
         }
@@ -709,7 +691,7 @@ void Vulkan::createVertexBuffer() {
         lineVertexBuffers_[i]->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         lineVertexBuffers_[i]->init();
 
-        std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        std::unique_ptr<myVK::Buffer> staginBuffer = std::make_unique<myVK::Buffer>(physicalDevice_, device_);
         staginBuffer->size_ = size;
         staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
@@ -756,7 +738,7 @@ void Vulkan::createIndexBuffer() {
     for (size_t i = 0; i < lineVertexBuffers_.size(); i++) {
         VkDeviceSize size = sizeof(float) * lineIndices_[i].size();
 
-        lineIndexBuffers_[i] = std::make_unique<Buffer>(physicalDevice_, device_);
+        lineIndexBuffers_[i] = std::make_unique<myVK::Buffer>(physicalDevice_, device_);
         if (size == 0) {
             continue;
         }
@@ -768,7 +750,7 @@ void Vulkan::createIndexBuffer() {
         lineIndexBuffers_[i]->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         lineIndexBuffers_[i]->init();
 
-        std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        std::unique_ptr<myVK::Buffer> staginBuffer = std::make_unique<myVK::Buffer>(physicalDevice_, device_);
         staginBuffer->size_ = size;
         staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
@@ -924,99 +906,7 @@ void Vulkan::draw() {
 }
 
 void Vulkan::loadAssets() {
-    if (ktxTexture_CreateFromNamedFile(skyBoxPath_.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &skyBoxTexture_) != KTX_SUCCESS) {
-        throw std::runtime_error("faield to create skybox!");
-    }
-
-    auto textureData = ktxTexture_GetData(skyBoxTexture_);
-    auto textureSize = ktxTexture_GetDataSize(skyBoxTexture_);
-
-    std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
-    staginBuffer->size_ = textureSize;
-    staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    staginBuffer->init();
-
-    auto data = staginBuffer->map(textureSize);
-    memcpy(data, textureData, textureSize);
-    staginBuffer->unMap();
-
-    skyBoxImage_ = std::make_unique<Image>(physicalDevice_, device_);
-    skyBoxImage_->flags_ = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-    skyBoxImage_->imageType_ = VK_IMAGE_TYPE_2D;
-    skyBoxImage_->format_ = VK_FORMAT_R8G8B8A8_SRGB;
-    skyBoxImage_->mipLevles_ = skyBoxTexture_->numLevels;
-    skyBoxImage_->samples_ = VK_SAMPLE_COUNT_1_BIT;
-    skyBoxImage_->tiling_ = VK_IMAGE_TILING_OPTIMAL;
-    skyBoxImage_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    skyBoxImage_->arrayLayers_ = 6;
-    skyBoxImage_->extent_ = {skyBoxTexture_->baseWidth, skyBoxTexture_->baseHeight, 1};
-    skyBoxImage_->usage_ = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    skyBoxImage_->viewType_ = VK_IMAGE_VIEW_TYPE_CUBE;
-    skyBoxImage_->subresourcesRange_ = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 6};
-    skyBoxImage_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    skyBoxImage_->init();
-
-    std::vector<VkBufferImageCopy> bufferCopyRegions;
-
-    for (uint32_t face = 0; face < 6; face++) {
-        for (uint32_t level = 0; level < skyBoxImage_->mipLevles_; level++) {
-            ktx_size_t offset;
-            auto ret = ktxTexture_GetImageOffset(skyBoxTexture_, level, 0, face, &offset);
-            assert(ret == KTX_SUCCESS);
-            VkBufferImageCopy copy{};
-            copy.bufferOffset = offset;
-            copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            copy.imageSubresource.mipLevel = level;
-            copy.imageSubresource.layerCount = 1;
-            copy.imageSubresource.baseArrayLayer = face;
-            copy.imageExtent.width = skyBoxTexture_->baseWidth >> level;
-            copy.imageExtent.height = skyBoxTexture_->baseHeight >> level;
-            copy.imageExtent.depth = 1;
-            bufferCopyRegions.push_back(copy);
-        }
-    }
-
-    VkImageSubresourceRange range{};
-    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    range.baseArrayLayer = 0;
-    range.layerCount = 6;
-    range.baseMipLevel = 0;
-    range.levelCount = skyBoxTexture_->numLevels;
-
-    auto cmdBuffer = beginSingleTimeCommands();
-        
-        Tools::setImageLayout(
-            cmdBuffer, 
-            skyBoxImage_->image(), 
-            VK_IMAGE_LAYOUT_UNDEFINED, 
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
-            range,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 
-            VK_PIPELINE_STAGE_TRANSFER_BIT
-        );
-
-        vkCmdCopyBufferToImage(
-            cmdBuffer, 
-            staginBuffer->buffer(), 
-            skyBoxImage_->image(), 
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
-            static_cast<uint32_t>(bufferCopyRegions.size()), 
-            bufferCopyRegions.data()
-        );
-
-        Tools::setImageLayout(
-            cmdBuffer, 
-            skyBoxImage_->image(), 
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 
-            range, 
-            VK_PIPELINE_STAGE_TRANSFER_BIT, 
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-        );
-
-    endSingleTimeCommands(cmdBuffer, transferQueue_);
+    
 }
 
 void Vulkan::updateDrawAssets() {
@@ -1038,6 +928,12 @@ void Vulkan::updateDrawAssets() {
         if (ok_ == false) {
             return ;
         }
+        std::string msg;
+        msg = std::to_string(static_cast<int32_t>(swapChain_->width())) + "-" + std::to_string(static_cast<int32_t>(swapChain_->height())) + "-";
+        msg += std::to_string(static_cast<int32_t>(x_)) + "-" + std::to_string(static_cast<int32_t>(y_));
+        msg += "\r\n\r\n";
+        std::cout << msg << std::endl;
+        tcpConnection_->send(msg);
         ok_ = false;
         auto& vertices = lineVertices_[currentFrame_];
         auto& indices = lineIndices_[currentFrame_];
@@ -1068,7 +964,7 @@ void Vulkan::updateDrawAssets() {
         }
         
         VkDeviceSize size = sizeof(float) * vertices.size();
-        vertexBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        vertexBuffer = std::make_unique<myVK::Buffer>(physicalDevice_, device_);
         vertexBuffer->size_ = size;
         vertexBuffer->usage_ = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         vertexBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
@@ -1077,7 +973,7 @@ void Vulkan::updateDrawAssets() {
         vertexBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         vertexBuffer->init();
 
-        std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        std::unique_ptr<myVK::Buffer> staginBuffer = std::make_unique<myVK::Buffer>(physicalDevice_, device_);
         staginBuffer->size_ = size;
         staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
@@ -1093,7 +989,7 @@ void Vulkan::updateDrawAssets() {
         copyBuffer(staginBuffer->buffer(), vertexBuffer->buffer(), size);
 
         size = sizeof(uint32_t) * indices.size();
-        indexBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        indexBuffer = std::make_unique<myVK::Buffer>(physicalDevice_, device_);
         indexBuffer->size_ = size;
         indexBuffer->usage_ = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
         indexBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
@@ -1102,7 +998,7 @@ void Vulkan::updateDrawAssets() {
         indexBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         indexBuffer->init();
 
-        staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        staginBuffer = std::make_unique<myVK::Buffer>(physicalDevice_, device_);
         staginBuffer->size_ = size;
         staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
@@ -1320,6 +1216,21 @@ void Vulkan::fillColor(std::vector<float>& vertices) {
 }
 
 void Vulkan::processNetWork(const std::string& msg) {
+    if (msg[0] == 'l') {
+        if (msg[1] == 'p') {
+            ok_ = true;
+            LeftButton_ = true;
+            LeftButtonOnce_ = true;
+        } else {
+            LeftButton_ = false;
+            LeftButtonOnce_ = false;
+        }
+        return ;
+    }
+    if (!LeftButton_) {
+        return ;
+    }
+    
     auto [extent, position] = parseMsg(msg);
     position.first = position.first / extent.first * swapChain_->width();
     position.second = position.second / extent.second * swapChain_->height();
@@ -1331,7 +1242,7 @@ void Vulkan::processNetWork(const std::string& msg) {
 
 std::pair<std::pair<float, float>, std::pair<float, float>> Vulkan::parseMsg(const std::string& msg) {
     float width = 0, height = 0, x = 0, y = 0;
-    size_t i = 0;
+    size_t i = 1;
     for (; i < msg.size(); i++) {
         if (msg[i] == '-') {
             break;
@@ -1350,7 +1261,7 @@ std::pair<std::pair<float, float>, std::pair<float, float>> Vulkan::parseMsg(con
         }
         x = x * 10 + msg[i] - '0';
     }
-    for (; i < msg.size(); i++) {
+    for (; i < msg.size() && msg[i] != '\r'; i++) {
         if (msg[i] == '-') {
             break;
         }
