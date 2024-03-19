@@ -23,21 +23,21 @@ private:
     VkDeviceMemory memory_;
     
 public:
-    VkImageType imageType_;
-    VkImageCreateFlags flags_ = 0;
-    VkFormat format_;
-    VkExtent3D extent_;
-    uint32_t mipLevles_;
-    uint32_t arrayLayers_;
-    VkSampleCountFlagBits samples_;
-    VkImageTiling tiling_;
-    VkImageUsageFlags usage_;
-    VkSharingMode sharingMode_;
-    uint32_t queueFamilyIndexCount_;
-    const uint32_t* pQueueFamilyIndices_;    
+    VkImageType imageType_{};
+    VkImageCreateFlags flags_{};
+    VkFormat format_{};
+    VkExtent3D extent_{};
+    uint32_t mipLevles_{};
+    uint32_t arrayLayers_{};
+    VkSampleCountFlagBits samples_{};
+    VkImageTiling tiling_{};
+    VkImageUsageFlags usage_{};
+    VkSharingMode sharingMode_{};
+    uint32_t queueFamilyIndexCount_{};
+    uint32_t* pQueueFamilyIndices_{};    
 
-    VkMemoryPropertyFlags memoryProperties_;
+    VkMemoryPropertyFlags memoryProperties_{};
 
-    VkImageViewType viewType_;
-    VkImageSubresourceRange subresourcesRange_;
+    VkImageViewType viewType_{};
+    VkImageSubresourceRange subresourcesRange_{};
 };

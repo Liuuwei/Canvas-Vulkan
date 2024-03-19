@@ -9,6 +9,6 @@ public:
     float delta() const;
 
 private:
-    std::chrono::time_point<std::chrono::steady_clock> prevTime_;
-    std::chrono::time_point<std::chrono::steady_clock> currentTime_;
+    std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> prevTime_;
+    std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> currentTime_;
 };

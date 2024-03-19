@@ -5,10 +5,14 @@
 
 class CommandPool {
 public:
-    CommandPool(VkDevice device, VkCommandPoolCreateInfo commandPoolInfo);
+    CommandPool(VkDevice device);
     ~CommandPool();
 
-    VkCommandPool get() const { return commandPool_; }
+    void init();
+    VkCommandPool commanddPool() const { return commandPool_; }
+    void*                 pNext_{};
+    VkCommandPoolCreateFlags    flags_{};
+    uint32_t                    queueFamilyIndex_{};
 private:
     VkDevice device_;
     VkCommandPool commandPool_;

@@ -2,16 +2,15 @@
 
 #include "vulkan/vulkan_core.h"
 #include <vulkan/vulkan.h>
-#include <vector>
 
 class  Pipeline {
 public:
-    Pipeline(VkDevice device, VkPipelineCache pipelineCache, const std::vector<VkGraphicsPipelineCreateInfo>& createInfos);
+    Pipeline(VkDevice device);
     ~Pipeline();
 
     void init();
     VkPipeline pipeline() const { return pipeline_; }
-private:
+public:
     VkDevice device_;
     VkPipeline pipeline_;
     VkPipelineCreateFlags                            flags_{};
@@ -25,7 +24,7 @@ private:
     VkPipelineMultisampleStateCreateInfo*      pMultisampleState_{};
     VkPipelineDepthStencilStateCreateInfo*     pDepthStencilState_{};
     VkPipelineColorBlendStateCreateInfo*       pColorBlendState_{};
-    VkPipelineDynamicStateCreateInfo*          pDynamicStat_{};
+    VkPipelineDynamicStateCreateInfo*          pDynamicState_{};
     VkPipelineLayout                                 layout_{};
     VkRenderPass                                     renderPass_{};
     uint32_t                                         subpass_{};

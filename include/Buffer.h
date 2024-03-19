@@ -36,11 +36,11 @@ private:
     void* data_ = nullptr;
     
 public:
-    VkDeviceSize size_;
-    VkBufferUsageFlags usage_;
-    VkSharingMode sharingMode_;
-    uint32_t queueFamilyIndexCount_;
-    const uint32_t* pQueueFamilyIndices_;
+    VkDeviceSize size_{};
+    VkBufferUsageFlags usage_{};
+    VkSharingMode sharingMode_{};
+    uint32_t queueFamilyIndexCount_{};
+    uint32_t* pQueueFamilyIndices_{};
 
-    VkMemoryPropertyFlags memoryProperties_;
+    VkMemoryPropertyFlags memoryProperties_{};
 };

@@ -1,11 +1,10 @@
 #include "Pipeline.h"
 #include "vulkan/vulkan_core.h"
+#include "Tools.h"
 #include <stdexcept>
 
-Pipeline::Pipeline(VkDevice device, VkPipelineCache pipelineCache, const std::vector<VkGraphicsPipelineCreateInfo>& createInfos) : device_(device) {
-    if (vkCreateGraphicsPipelines(device, pipelineCache, createInfos.size(), createInfos.data(), nullptr, &pipeline_) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create graphics pipeline!");
-    }
+Pipeline::Pipeline(VkDevice device) : device_(device) {
+
 }
 
 Pipeline::~Pipeline() {
@@ -23,5 +22,14 @@ void Pipeline::init() {
     pipelineInfo.pTessellationState = pTessellationState_;
     pipelineInfo.pViewportState = pViewportState_;
     pipelineInfo.pRasterizationState = pRasterizationState_;
-    
+    pipelineInfo.pMultisampleState = pMultisampleState_;
+    pipelineInfo.pDepthStencilState = pDepthStencilState_;
+    pipelineInfo.pColorBlendState = pColorBlendState_;
+    pipelineInfo.pDynamicState = pDynamicState_;
+    pipelineInfo.layout = layout_;
+    pipelineInfo.renderPass = renderPass_;
+    pipelineInfo.subpass = subpass_;
+    pipelineInfo.basePipelineHandle = basePipelineHandle_;
+    pipelineInfo.basePipelineIndex = basePipelineIndex_;
+    VK_CHECK(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_));
 }

@@ -5,11 +5,14 @@
 
 class Semaphore {
 public:
-    Semaphore(VkDevice device, VkSemaphoreCreateInfo createInfo);
+    Semaphore(VkDevice device);
     ~Semaphore();
 
-    VkSemaphore get() const { return semaphore_; }
-    VkSemaphore* getPtr() { return &semaphore_; }
+    void init();
+    VkSemaphore semaphore() const { return semaphore_; }
+    VkSemaphore* semaphorePtr() { return &semaphore_; }
+    void*               pNext_{};
+    VkSemaphoreCreateFlags    flags_{};
 private:
     VkDevice device_;
     VkSemaphore semaphore_;

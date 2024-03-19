@@ -8,8 +8,6 @@ DescriptorSetLayout.cpp
 Fence.cpp 
 FrameBuffer.cpp 
 Image.cpp 
-ImageView.cpp 
-Memory.cpp 
 Pipeline.cpp 
 PipelineLayout.cpp 
 RenderPass.cpp 

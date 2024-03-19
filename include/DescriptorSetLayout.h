@@ -5,10 +5,15 @@
 
 class DescriptorSetLayout {
 public:
-    DescriptorSetLayout(VkDevice device, VkDescriptorSetLayoutCreateInfo layoutInfo);
+    DescriptorSetLayout(VkDevice device);
     ~DescriptorSetLayout();
     
-    VkDescriptorSetLayout get() const { return descriptorSetlayout_; }
+    void init();
+    VkDescriptorSetLayout descriptorSetLayout() const { return descriptorSetlayout_; }
+    void*                            pNext_{};
+    VkDescriptorSetLayoutCreateFlags       flags_{};
+    uint32_t                               bindingCount_{};
+    VkDescriptorSetLayoutBinding*    pBindings_{};
 private:
     VkDevice device_;
     VkDescriptorSetLayout descriptorSetlayout_;

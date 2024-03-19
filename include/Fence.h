@@ -5,11 +5,14 @@
 
 class Fence {
 public:
-    Fence(VkDevice device, VkFenceCreateInfo createInfo);
+    Fence(VkDevice device);
     ~Fence();
 
-    VkFence get() const { return fence_; }
-    VkFence* getPtr() { return &fence_; }
+    void init();
+    VkFence fence() const { return fence_; }
+    VkFence* fencePtr() { return &fence_; }
+    void*           pNext_{};
+    VkFenceCreateFlags    flags_{};
 private:
     VkDevice device_;
     VkFence fence_;

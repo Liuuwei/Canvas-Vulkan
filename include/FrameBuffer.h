@@ -5,10 +5,19 @@
 
 class FrameBuffer {
 public:
-    FrameBuffer(VkDevice device, VkFramebufferCreateInfo frameBufferInfo);
+    FrameBuffer(VkDevice device);
     ~FrameBuffer();
 
-    VkFramebuffer get() const { return frameBuffer_; }
+    void init();
+    VkFramebuffer frameBuffer() const { return frameBuffer_; }
+    void*                 pNext_{};
+    VkFramebufferCreateFlags    flags_{};
+    VkRenderPass                renderPass_{};
+    uint32_t                    attachmentCount_{};
+    VkImageView*          pAttachments_{};
+    uint32_t                    width_{};
+    uint32_t                    height_{};
+    uint32_t                    layers_{};
 private:
     VkDevice device_;
     VkFramebuffer frameBuffer_;

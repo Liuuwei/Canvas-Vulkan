@@ -1,2 +1,5 @@
-C:/Users/Liuwei/git/vcpkg/packages/shaderc_x64-windows/tools/shaderc/glslc.exe shader.vert -o vert.spv
-C:/Users/Liuwei/git/vcpkg/packages/shaderc_x64-windows/tools/shaderc/glslc.exe shader.frag -o frag.spv
+glslc Brush.vert -o spv/VertBrush.spv
+glslc Brush.frag -o spv/FragBrush.spv
+
+glslc Canvas.vert -o spv/VertCanvas.spv
+glslc Canvas.frag -o spv/FragCanvas.spv

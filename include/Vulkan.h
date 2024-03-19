@@ -30,12 +30,9 @@
 #include "CommandPool.h"
 #include "CommandBuffer.h"
 #include "DescriptorPool.h"
-#include "Block.h"
 #include "Sampler.h"
 #include "Camera.h"
 #include "Timer.h"
-#include "Font.h"
-#include "Plane.h"
 
 class Vulkan {
 public:
@@ -77,19 +74,21 @@ private:
 
 private:
     bool checkValidationLayerSupport() ;
-    bool checkDeviceExtensionsSupport(VkPhysicalDevice physicalDevice) ;
+    bool checkDeviceExtensionsSupport(VkPhysicalDevice physicalDevice);
     bool deviceSuitable(VkPhysicalDevice);
-    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) ;
-    VkSampleCountFlagBits getMaxUsableSampleCount() ;
-    VkFormat findDepthFormat() ;
-    VkFormat findSupportedFormat(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features) ;
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) ;
-    void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) ;
+    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
+    VkSampleCountFlagBits getMaxUsableSampleCount();
+    VkFormat findDepthFormat();
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags features);
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+    void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue);
     void fillColor(std::vector<float>& vertices);
     void processNetWork(const std::string& msg);
     std::pair<std::pair<float, float>, std::pair<float, float>> parseMsg(const std::string& msg);
+    void createBrushPipeline();
+    void createCanvasPipeline();
     
     GLFWwindow* windows_;
     uint32_t width_;
@@ -110,14 +109,22 @@ private:
 
     std::unique_ptr<SwapChain> swapChain_;
 
-    std::unique_ptr<Sampler> sampler_;
+    std::unique_ptr<Sampler> brushSampler_;
+    std::unique_ptr<Sampler> canvasSampler_;
 
-    std::unique_ptr<DescriptorPool> descriptorPool_;
-    std::unique_ptr<DescriptorSetLayout> descriptorSetLayout_;
-    std::vector<VkDescriptorSet> descriptorSets_;
+    std::unique_ptr<DescriptorPool> brushDescriptorPool_;
+    std::unique_ptr<DescriptorSetLayout> brushDescriptorSetLayout_;
+    std::vector<VkDescriptorSet> brushDescriptorSets_;
 
-    std::unique_ptr<PipelineLayout> pipelineLayout_;
-    std::unique_ptr<Pipeline> graphicsPipeline_;
+    std::unique_ptr<DescriptorPool> canvasDescriptorPool_;
+    std::unique_ptr<DescriptorSetLayout> canvasDescriptorSetLayout_;
+    VkDescriptorSet canvasDescriptorSets_;
+
+    std::unique_ptr<PipelineLayout> brushPipelineLayout_;
+    std::unique_ptr<Pipeline> brushPipeline_;
+
+    std::unique_ptr<PipelineLayout> canvasPipelineLayout_;
+    std::unique_ptr<Pipeline> canvasPipeline_;
 
     std::unique_ptr<Image> colorImage_;
 
@@ -128,9 +135,6 @@ private:
     std::unique_ptr<CommandPool> commandPool_;
     std::vector<std::unique_ptr<CommandBuffer>> commandBuffers_;
 
-    std::unique_ptr<Buffer> vertexBuffer_;
-    std::unique_ptr<Buffer> indexBuffer_;
-
     std::vector<std::unique_ptr<Fence>> inFlightFences_;
     std::vector<std::unique_ptr<Semaphore>> imageAvaiableSemaphores_;
     std::vector<std::unique_ptr<Semaphore>> renderFinishSemaphores_;
@@ -138,6 +142,9 @@ private:
     const std::string skyBoxPath_ = "../textures/skybox.ktx";
     ktxTexture* skyBoxTexture_;
     std::unique_ptr<Image> skyBoxImage_;
+
+    const std::string canvasTexturePath_ = "../textures/canvas-texture.jpg";
+    std::unique_ptr<Image> canvasImage_;
 
     Tools::QueueFamilyIndices queueFamilies_;
     VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
@@ -177,9 +184,12 @@ private:
 
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
-    std::unique_ptr<Plane> vertex_;
-    std::vector<float> vertices_;
-    std::vector<uint32_t> indices_;
+    std::unique_ptr<Vertex> canvas_;
+    std::vector<float> canvasVertices_;
+    std::vector<uint32_t> canvasIndices_;
+    std::unique_ptr<Buffer> canvasVertexBuffer_;
+    std::unique_ptr<Buffer> canvasIndexBuffer_;
+    std::unique_ptr<Buffer> canvasUniformBuffer_;
 
     std::unique_ptr<Vertex> line_;
     std::vector<std::vector<float>> lineVertices_;
@@ -201,6 +211,7 @@ private:
         Red, 
         Green, 
         Blue, 
+        Black, 
     };
 
     Color color_ = Write;

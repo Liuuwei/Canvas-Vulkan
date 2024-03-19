@@ -201,6 +201,8 @@ static void setImageLayout(
     imageMemoryBarrier.image = image;
     imageMemoryBarrier.oldLayout = oldLayout;
     imageMemoryBarrier.newLayout = newLayout;
+    imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     imageMemoryBarrier.subresourceRange = subresourcesRange;
 
     switch (oldLayout) {

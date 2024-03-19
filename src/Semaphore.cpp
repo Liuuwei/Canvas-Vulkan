@@ -1,13 +1,19 @@
 #include "Semaphore.h"
 #include "vulkan/vulkan_core.h"
-#include <stdexcept>
+#include "Tools.h"
 
-Semaphore::Semaphore(VkDevice device, VkSemaphoreCreateInfo createInfo) : device_(device) {
-    if (vkCreateSemaphore(device, &createInfo, nullptr, &semaphore_) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create semaphore!");
-    }
+Semaphore::Semaphore(VkDevice device) : device_(device) {
+
 }
 
 Semaphore::~Semaphore() {
     vkDestroySemaphore(device_, semaphore_, nullptr);
+}
+
+void Semaphore::init() {
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    semaphoreInfo.flags = flags_;
+    semaphoreInfo.pNext = pNext_;
+    VK_CHECK(vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &semaphore_));
 }
