@@ -2,6 +2,8 @@
 #include "vulkan/vulkan_core.h"
 #include "Tools.h"
 
+using namespace myVK;
+
 Buffer::Buffer(VkPhysicalDevice physicalDevice, VkDevice device) : physicalDevice_(physicalDevice), device_(device) {
 
 }

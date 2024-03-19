@@ -1,6 +1,6 @@
 #pragma once
 
-#include "freetype/fttypes.h"
+#include "freetype2/ft2build.h"
 #include <string>
 
 #include <ft2build.h>

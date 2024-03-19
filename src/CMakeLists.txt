@@ -23,7 +23,16 @@ Timer.cpp
 Font.cpp
 )
 
-target_link_libraries(MyVulkan vulkan-1 glfw3dll ktx freetype)
+target_link_libraries(MyVulkan vulkan glfw freetype tinymuduo)
 
-add_executable(Main main.cpp)
-target_link_libraries(Main MyVulkan vulkan-1 glfw3dll ktx freetype)
+# add_executable(Main main.cpp)
+# target_link_libraries(Main MyVulkan vulkan glfw freetype tinymuduo)
+
+add_executable(Server Server.cpp)
+target_link_libraries(Server tinymuduo)
+
+add_executable(Client1 client1.cpp)
+target_link_libraries(Client1 MyVulkan vulkan glfw freetype tinymuduo)
+
+add_executable(Client2 client2.cpp)
+target_link_libraries(Client2 MyVulkan vulkan glfw freetype tinymuduo)

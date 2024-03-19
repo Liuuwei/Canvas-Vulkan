@@ -5,6 +5,8 @@
 #include <vulkan/vulkan.h>
 #include "Tools.h"
 
+namespace myVK {
+
 class Buffer {
 public:
     Buffer(VkPhysicalDevice physicalDevice, VkDevice device);
@@ -44,3 +46,5 @@ public:
 
     VkMemoryPropertyFlags memoryProperties_;
 };
+
+}

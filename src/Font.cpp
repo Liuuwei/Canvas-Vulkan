@@ -45,7 +45,7 @@ void Font::loadGlyph(FT_UInt index, FT_Int32 flags) {
 void Font::check(FT_Error error) {
     if (error) {
         char msg[128];
-        sprintf_s(msg, 128, "Fate: %s: line is %s", __FILE__, __LINE__);
+        std::snprintf(msg, 128, "Fate: %s: line is %d", __FILE__, __LINE__);
         throw std::runtime_error(msg);
     }
 }

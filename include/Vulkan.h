@@ -35,7 +35,6 @@
 #include "Timer.h"
 #include "Font.h"
 #include "Plane.h"
-
 #include "TcpConnection.h"
 
 class Vulkan {
@@ -48,6 +47,11 @@ public:
     void processNetWork(const std::string& msg);
     std::shared_ptr<TcpConnection> tcpConnection_;
     GLFWwindow* windows_;
+    std::unordered_map<int, long> msgTime_;
+    int msgId_ = 0;
+    int fps_ = 60;
+    long millisecondOfFrame_ = 1000 / fps_;
+    int msgNumbers_ = 0;
 private:
     void initWindow();
     void initVulkan();
@@ -189,9 +193,8 @@ private:
     bool LeftButton_ = false;
     bool LeftButtonOnce_ = false;
 
-
-    double x_;
-    double y_;
+    double x_ = 0.0f;
+    double y_ = 0.0f;
     bool ok_ = false;
     
     int times_ = 0;

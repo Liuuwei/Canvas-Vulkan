@@ -1,5 +1,6 @@
 #include "TcpConnection.h"
 #include "Vulkan.h"
+#include <GLFW/glfw3.h>
 #include <exception>
 #include <iostream>
 #include <memory>
@@ -8,18 +9,23 @@
 #include "Log.h"
 #include "TcpClient.h"
 
+Vulkan vulkan("Game", 800, 600);
+
+
 void onConnection(const std::shared_ptr<TcpConnection>& conn) {
-    try {
-        Vulkan vulkan("Game", 800, 600);
-        vulkan.tcpConnection_ = conn;
-        vulkan.run();
-    } catch (std::exception e) {
-        std::cerr << e.what() << std::endl;
+    while (!glfwWindowShouldClose(vulkan.windows_)) {
+        vulkan.pollEvents();
     }
 }
 
 void onMessage(const std::shared_ptr<TcpConnection>& conn, Buffer* buffer) {
-
+    int n = -1;
+    while ( (n = buffer->FindEnd()) != -1) {
+        std::string msg = buffer->retriveSome(n - buffer->readIndex() + 1);
+        vulkan.processNetWork(msg);
+        vulkan.draw();
+    }
+    vulkan.draw();
 }
 
 int main() {

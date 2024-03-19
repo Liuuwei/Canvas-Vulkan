@@ -3,6 +3,7 @@
 #include "GLFW/glfw3.h"
 #include "vulkan/vulkan_core.h"
 #include <algorithm>
+#include <bits/chrono.h>
 #include <limits>
 #include <stdexcept>
 
@@ -13,6 +14,7 @@
 #include <fstream>
 #include <iostream>
 #include <cassert>
+#include <chrono>
 
 struct Tools {
 
@@ -292,5 +294,10 @@ static std::string errorString(VkResult errorCode)
 }
 
 #endif
+
+static long timeOfMilliseconds() {
+    auto now = std::chrono::high_resolution_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+}
 
 };

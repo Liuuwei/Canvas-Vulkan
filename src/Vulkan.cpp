@@ -11,6 +11,7 @@
 #include "Tools.h"
 #include "vulkan/vulkan_core.h"
 #include <array>
+#include <bits/chrono.h>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -20,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <stdexcept>
 #include <iostream>
@@ -48,6 +50,18 @@ void Vulkan::run() {
     }
 
     vkDeviceWaitIdle(device_);
+}
+
+void Vulkan::pollEvents() {
+    static auto prevTime = Tools::timeOfMilliseconds();
+    static long deltaTime = 0;
+    auto currentTIme = Tools::timeOfMilliseconds();
+    deltaTime += currentTIme - prevTime;
+    if (deltaTime >= millisecondOfFrame_) {
+        glfwPollEvents();
+        deltaTime = 0.0f;
+    }
+    prevTime = currentTIme;
 }
 
 void Vulkan::initWindow() {
@@ -84,13 +98,26 @@ void Vulkan::initWindow() {
     });
     glfwSetCursorPosCallback(windows_, [](GLFWwindow* window, double xpos, double ypos) {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
+        static auto prevTime = Tools::timeOfMilliseconds();
+        static long deltaTime = 0;
 
         if (vulkan->LeftButton_) {
             std::string msg = "m" + std::to_string(static_cast<int32_t>(vulkan->swapChain_->width())) + "-"
                                 + std::to_string(static_cast<int32_t>(vulkan->swapChain_->height())) + "-"
                                 + std::to_string(static_cast<int32_t>(xpos)) + "-"
                                 + std::to_string(static_cast<int32_t>(ypos)) + "\r\n\r\n";
-            vulkan->tcpConnection_->send(msg);
+            auto time = std::chrono::high_resolution_clock::now();
+            auto duration = time.time_since_epoch();
+            auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+            vulkan->msgTime_[vulkan->msgId_++] = milliseconds;
+            vulkan->msgNumbers_++;
+            auto currentTime = Tools::timeOfMilliseconds();
+            deltaTime += currentTime - prevTime;
+            // if (deltaTime >= vulkan->millisecondOfFrame_) {
+                vulkan->tcpConnection_->send(msg);
+                deltaTime = 0;
+            // }
+            prevTime = currentTime;
         }
         
         auto camera = vulkan->camera_;
@@ -101,12 +128,16 @@ void Vulkan::initWindow() {
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
             std::string msg;
             if (action == GLFW_PRESS) {
-                vulkan->LeftButton_ = true;
-                vulkan->LeftButtonOnce_ = true;
+                msg = "lp";
             } else {
-                vulkan->LeftButton_ = false;
-                vulkan->LeftButtonOnce_ = false;
+                msg = "lr";
             }
+            msg += "\r\n\r\n";
+            auto time = std::chrono::high_resolution_clock::now();
+            auto duration = time.time_since_epoch();
+            auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+            vulkan->msgTime_[vulkan->msgId_++] = milliseconds;
+            vulkan->msgNumbers_++;
             vulkan->tcpConnection_->send(msg);
         }
     });
@@ -836,18 +867,9 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
         std::array<VkDescriptorSet, 1> descriptorSets{descriptorSets_[currentFrame_]};
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_->get(), 0, static_cast<uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
 
-        // std::cout << "------indices------" << std::endl;
         for (auto p : lineOffsets_[currentFrame_]) {
-            // std::cout << p.first << "," << p.second - p.first << "|";
             vkCmdDrawIndexed(commandBuffer, p.second - p.first, 1, p.first, 0, 0);
         }
-        // std::cout << std::endl;
-        // std::cout << "------vertices------" << std::endl;
-        // for (size_t i = 0; i < lineVertices_[currentFrame_].size(); i += 7) {
-            // std::cout << lineVertices_[currentFrame_][i] << "," << lineVertices_[currentFrame_][i + 1] << "|";
-        // }
-        // std::cout << std::endl;
-        // std::cout << "------times------" << std::endl << times_ << std::endl;
     
     vkCmdEndRenderPass(commandBuffer);
 
@@ -857,6 +879,7 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
 }
 
 void Vulkan::draw() {
+    std::cout << msgNumbers_ << std::endl;
     timer_.tick();
     camera_->setDeltaTime(timer_.delta());
 
@@ -939,12 +962,6 @@ void Vulkan::updateDrawAssets() {
         if (ok_ == false || LeftButton_ == false) {
             return ;
         }
-        std::string msg;
-        msg = std::to_string(static_cast<int32_t>(swapChain_->width())) + "-" + std::to_string(static_cast<int32_t>(swapChain_->height())) + "-";
-        msg += std::to_string(static_cast<int32_t>(x_)) + "-" + std::to_string(static_cast<int32_t>(y_));
-        msg += "\r\n\r\n";
-        std::cout << msg << std::endl;
-        tcpConnection_->send(msg);
         ok_ = false;
         auto& vertices = lineVertices_[currentFrame_];
         auto& indices = lineIndices_[currentFrame_];
@@ -1232,28 +1249,28 @@ void Vulkan::fillColor(std::vector<float>& vertices) {
 }
 
 void Vulkan::processNetWork(const std::string& msg) {
+    static int msgId = 0;
     if (msg[0] == 'l') {
         if (msg[1] == 'p') {
-            ok_ = true;
             LeftButton_ = true;
             LeftButtonOnce_ = true;
         } else {
+            ok_ = false;
             LeftButton_ = false;
             LeftButtonOnce_ = false;
         }
         return ;
     }
-    if (!LeftButton_) {
-        return ;
-    }
     
-    auto [extent, position] = parseMsg(msg);
-    position.first = position.first / extent.first * swapChain_->width();
-    position.second = position.second / extent.second * swapChain_->height();
+    if (LeftButton_) {
+        auto [extent, position] = parseMsg(msg);
+        position.first = position.first / extent.first * swapChain_->width();
+        position.second = position.second / extent.second * swapChain_->height();
 
-    ok_ = true;
-    x_ = position.first;
-    y_ = position.second;
+        ok_ = true;
+        x_ = position.first;
+        y_ = position.second;
+    }
 }
 
 std::pair<std::pair<float, float>, std::pair<float, float>> Vulkan::parseMsg(const std::string& msg) {
@@ -1265,18 +1282,21 @@ std::pair<std::pair<float, float>, std::pair<float, float>> Vulkan::parseMsg(con
         }
         width = width * 10 + msg[i] - '0';
     }
+    i++;
     for (; i < msg.size(); i++) {
         if (msg[i] == '-') {
             break;
         }
         height = height * 10 + msg[i] - '0';
     }
+    i++;
     for (; i < msg.size(); i++) {
         if (msg[i] == '-') {
             break;
         }
         x = x * 10 + msg[i] - '0';
     }
+    i++;
     for (; i < msg.size() && msg[i] != '\r'; i++) {
         if (msg[i] == '-') {
             break;
