@@ -16,7 +16,7 @@ layout(location = 0) out struct {
 } outValue;
 
 void main() {
-    gl_Position =  ubo.proj * vec4(inPosition, 0.0, 1.0);
+    gl_Position =  ubo.proj * ubo.view * vec4(inPosition, 0.0, 1.0);
     outValue.color = inColor;
     outValue.texCoord = inTexCoord;
 }
