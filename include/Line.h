@@ -26,7 +26,7 @@ public:
 
         attributeDescriptions[1].binding = binding;
         attributeDescriptions[1].location = location++;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
         attributeDescriptions[1].offset = offsetof(Point, color_);
 
         attributeDescriptions[2].binding = binding;
@@ -43,7 +43,7 @@ public:
     
     struct Point {
         glm::vec2 position_;
-        glm::vec3 color_;
+        glm::vec4 color_;
         glm::vec2 texCoord_;
     };
 private:
