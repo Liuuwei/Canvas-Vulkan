@@ -1287,7 +1287,7 @@ void Vulkan::recreateSwapChain() {
     createFrameBuffer();   
 
     {
-        auto t = canvas_->vertices(swapChain_->width(), swapChain_->height());
+        auto t = canvas_->vertices(swapChain_->width() / 2.0f, swapChain_->height() / 2.0f);
         canvasVertices_ = t.first;
         canvasIndices_ = t.second;
     }
