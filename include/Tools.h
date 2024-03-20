@@ -2,6 +2,8 @@
 
 #include "GLFW/glfw3.h"
 #include "vulkan/vulkan_core.h"
+#include <cmath>
+#include <glm/glm.hpp>
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -294,5 +296,20 @@ static std::string errorString(VkResult errorCode)
 }
 
 #endif
+
+static float pointToLineLength(float a, float b, float x, float y) {
+    // y = ax + b; length = sin * r; r = x1 - x2; sin = abs(tan) / sqrt(1 + tan2)
+    float x1;
+    if (a == 0) {
+        x1 = x;
+    } else {
+        x1 = (y - b) / a;
+    }
+    auto r = std::abs(x - x1);
+    auto tan = a;
+    auto sin = std::abs(tan) / std::sqrt(1 + std::pow(tan, 2));
+
+    return sin * r;
+}
 
 };
