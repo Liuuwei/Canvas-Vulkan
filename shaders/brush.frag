@@ -10,10 +10,5 @@ layout(location = 0) in struct {
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    vec4 canvasColor = texture(texSampler, outValue.texCoord);
     outColor = outValue.color;
-    if (canvasColor.a > outColor.a) {
-        // discard;
-        outColor = canvasColor;
-    }
 }
