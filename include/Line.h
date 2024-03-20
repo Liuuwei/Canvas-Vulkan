@@ -2,7 +2,13 @@
 
 #include "Vertex.h"
 #include "vulkan/vulkan_core.h"
+#include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <fstream>
+#include <stdexcept>
+#include <vector>
+#include <iostream>
 
 class Line : public Vertex {
 public:
@@ -38,7 +44,7 @@ public:
     }
 
     VkPrimitiveTopology topology() const override {
-        return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+        return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
     }
     
     struct Point {
@@ -46,6 +52,24 @@ public:
         glm::vec4 color_;
         glm::vec2 texCoord_;
     };
+
+    std::pair<std::vector<Point>, std::vector<uint32_t>> initVertices(int width, int height) {
+        std::vector<Point> vertices;
+        std::vector<uint32_t> indices;
+
+        int a = 0;
+        for (int i = -width / 2; i <= width / 2; i++) {
+            for (int j = -height / 2; j <= height / 2; j++) {
+                Point point{};
+                point.position_ = glm::vec2(i, j);
+                point.color_ = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f);
+                vertices.push_back(point);
+                indices.push_back(a++);
+            }
+        }
+
+        return {vertices, indices};
+    }
 private:
 
 };
