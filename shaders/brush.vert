@@ -7,14 +7,18 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(location = 0) in vec2 inPosition;
-layout(location = 1) in vec3 inColor;
-layout(location = 2) in vec2 inTexCoord;
+layout(location = 1) in vec4 inColor;
+layout(location = 2) in vec2 inWidthAndHeight;
 
 layout(location = 0) out struct {
-    vec3 color;
+    vec4 color;
+    vec2 texCoord;
 } outValue;
 
 void main() {
     gl_Position =  ubo.proj * vec4(inPosition, 0.0, 1.0);
     outValue.color = inColor;
+    
+    vec2 tmp = gl_Position.xy + vec2(1.0, 1.0);
+    outValue.texCoord = tmp / 2.0;
 }

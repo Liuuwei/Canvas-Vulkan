@@ -230,6 +230,7 @@ void Vulkan::createLogicDevice() {
 
     VkDeviceCreateInfo deviceInfo{};
     VkPhysicalDeviceFeatures features{};
+    features.wideLines = VK_TRUE;
     features.sparseBinding = VK_TRUE;
     features.samplerAnisotropy = VK_TRUE;
     deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -589,7 +590,7 @@ void Vulkan::createBrushPipeline() {
     // rasterizaInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizaInfo.cullMode = VK_CULL_MODE_NONE;
     rasterizaInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rasterizaInfo.lineWidth = 1.0f;
+    rasterizaInfo.lineWidth = 5.0f;
 
     VkPipelineMultisampleStateCreateInfo multipleInfo{};
     multipleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -605,7 +606,7 @@ void Vulkan::createBrushPipeline() {
     depthStencilInfo.maxDepthBounds = 1.0f;
 
     VkPipelineColorBlendAttachmentState colorBlendAttachmentInfo{};
-    colorBlendAttachmentInfo.blendEnable = VK_TRUE;
+    colorBlendAttachmentInfo.blendEnable = VK_FALSE;
     colorBlendAttachmentInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachmentInfo.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
     colorBlendAttachmentInfo.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -619,9 +620,10 @@ void Vulkan::createBrushPipeline() {
     colorBlendInfo.attachmentCount = 1;
     colorBlendInfo.pAttachments = &colorBlendAttachmentInfo;
 
-    std::array<VkDynamicState, 2> dynamics{
+    std::array<VkDynamicState, 3> dynamics{
         VK_DYNAMIC_STATE_VIEWPORT, 
         VK_DYNAMIC_STATE_SCISSOR, 
+        VK_DYNAMIC_STATE_LINE_WIDTH, 
     };
     VkPipelineDynamicStateCreateInfo dynamicInfo{};
     dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -994,8 +996,8 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
     renderPassBeginInfo.framebuffer = frameBuffers_[imageIndex]->frameBuffer();
     renderPassBeginInfo.renderArea.extent = swapChain_->extent();
     std::array<VkClearValue, 3> clearValues;
-    clearValues[0].color = {0.0f, 0.0f, 0.0f};
-    clearValues[1].color = {0.0f, 0.0f, 0.0f};
+    clearValues[0].color = {0.0f, 0.0f, 0.0f, 0.0f};
+    clearValues[1].color = {0.0f, 0.0f, 0.0f, 0.0f};
     clearValues[2].depthStencil = {1.0f, 0};
     renderPassBeginInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassBeginInfo.pClearValues = clearValues.data();
@@ -1013,12 +1015,13 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+        VkDeviceSize offsets[] = {0};
+
         // Canvas
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, canvasPipeline_->pipeline());
         std::vector<VkDescriptorSet> canvasDescriptorSets{canvasDescriptorSets_};
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, canvasPipelineLayout_->pipelineLayout(), 0, static_cast<uint32_t>(canvasDescriptorSets.size()), canvasDescriptorSets.data(), 0, nullptr);
         std::vector<VkBuffer> canvasVertexBuffers ={canvasVertexBuffer_->buffer()};
-        VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(commandBuffer, 0, static_cast<uint32_t>(canvasVertexBuffers.size()), canvasVertexBuffers.data(), offsets);
         vkCmdBindIndexBuffer(commandBuffer, canvasIndexBuffer_->buffer(), 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(commandBuffer, canvasIndices_.size(), 1, 0, 0, 0);
@@ -1026,7 +1029,7 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
         // Lines
         if (lineVertices_[currentFrame_].size() != 0) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, brushPipeline_->pipeline());
-
+            vkCmdSetLineWidth(commandBuffer, 5.0f);
             std::vector<VkBuffer> vertexBuffer = {lineVertexBuffers_[currentFrame_]->buffer()};
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffer.data(), offsets);
             vkCmdBindIndexBuffer(commandBuffer, lineIndexBuffers_[currentFrame_]->buffer(), 0, VK_INDEX_TYPE_UINT32);
@@ -1203,8 +1206,8 @@ void Vulkan::updateDrawAssets() {
 
         fillColor(vertices);
 
-        vertices.push_back(1.0f);
-        vertices.push_back(1.0f);
+        vertices.push_back(static_cast<float>(swapChain_->width()));
+        vertices.push_back(static_cast<float>(swapChain_->height()));
         indices.push_back(indices.size());    
         if (!indexOffset.empty()) {
             indexOffset.back().second = indices.size();
@@ -1513,26 +1516,31 @@ void Vulkan::fillColor(std::vector<float>& vertices) {
         vertices.push_back(1.0f);
         vertices.push_back(1.0f);
         vertices.push_back(1.0f);
+        vertices.push_back(0.0f);
         break;
     case Color::Red:
         vertices.push_back(1.0f);
         vertices.push_back(0.0f);
         vertices.push_back(0.0f);
+        vertices.push_back(1.0f);
         break;
     case Color::Green:
         vertices.push_back(0.0f);
         vertices.push_back(1.0f);
         vertices.push_back(0.0f);
+        vertices.push_back(1.0f);
         break;
     case Color::Blue:
         vertices.push_back(0.0f);
         vertices.push_back(0.0f);
+        vertices.push_back(1.0f);
         vertices.push_back(1.0f);
         break;
     case Color::Black:
         vertices.push_back(0.0f);
         vertices.push_back(0.0f);
         vertices.push_back(0.0f);
+        vertices.push_back(1.0f);
         break;
     }
 }
