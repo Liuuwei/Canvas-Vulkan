@@ -5,10 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <fstream>
-#include <stdexcept>
 #include <vector>
-#include <iostream>
 
 class Line : public Vertex {
 public:
@@ -48,9 +45,10 @@ public:
     }
     
     struct Point {
-        glm::vec2 position_;
-        glm::vec4 color_;
-        glm::vec2 texCoord_;
+        Point() {}
+        glm::vec2 position_{};
+        glm::vec4 color_{};
+        glm::vec2 texCoord_{};
     };
 
     std::pair<std::vector<Point>, std::vector<uint32_t>> initVertices(int width, int height) {
