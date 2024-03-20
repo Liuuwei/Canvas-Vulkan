@@ -19,6 +19,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <memory>
 
 #include "Tools.h"
@@ -33,6 +34,7 @@
 #include "Sampler.h"
 #include "Camera.h"
 #include "Timer.h"
+#include "Line.h"
 
 class Vulkan {
 public:
@@ -84,11 +86,10 @@ private:
     void copyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue);
-    void fillColor(std::vector<float>& vertices);
-    void processNetWork(const std::string& msg);
-    std::pair<std::pair<float, float>, std::pair<float, float>> parseMsg(const std::string& msg);
+    void fillColor(uint32_t index);
     void createBrushPipeline();
     void createCanvasPipeline();
+    void changePoint();
     
     GLFWwindow* windows_;
     uint32_t width_;
@@ -191,17 +192,24 @@ private:
     std::unique_ptr<Buffer> canvasIndexBuffer_;
     std::unique_ptr<Buffer> canvasUniformBuffer_;
 
-    std::unique_ptr<Vertex> line_;
-    std::vector<std::vector<float>> lineVertices_;
+    std::unique_ptr<Line> line_;
+    std::vector<std::vector<Line::Point>> lineVertices_;
     std::vector<std::vector<uint32_t>> lineIndices_;
     std::vector<std::unique_ptr<Buffer>> lineVertexBuffers_;
     std::vector<std::unique_ptr<Buffer>> lineIndexBuffers_;
     std::vector<std::vector<std::pair<uint32_t, uint32_t>>> lineOffsets_;
+    std::vector<std::map<std::pair<int, int>, uint32_t>> lineVertexMaps_;
+    std::vector<long long> lineVerticesModify_;
+    float lineWidth_ = 1.0f;
     bool LeftButton_ = false;
     bool LeftButtonOnce_ = false;
+    bool LeftButtonOnceIn_ = false;
+    bool prevCursorHandled_ = false;
 
-    double x_;
-    double y_;
+    glm::vec2 prevCursor_{};
+    glm::vec2 currCursor_{};
+    glm::vec2 prevCursorRelative_{};
+    glm::vec2 currCursorRelative_{};
     bool ok_ = false;
     
     int times_ = 0;
@@ -213,6 +221,13 @@ private:
         Blue, 
         Black, 
     };
+
+    const glm::vec3 write3_ = glm::vec3(1.0f, 1.0f, 1.0f);
+    const glm::vec3 red3_ = glm::vec3(1.0f, 0.0f, 0.0f);
+    const glm::vec3 green3_ = glm::vec3(0.0f, 1.0f, 0.0f);
+    const glm::vec3 blue3_ = glm::vec3(0.0f, 0.0f, 1.0f);
+    const glm::vec3 black3_ = glm::vec3(0.0f, 0.0f, 0.0f);
+
 
     Color color_ = Write;
 

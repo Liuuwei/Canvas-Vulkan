@@ -83,6 +83,13 @@ void Vulkan::initWindow() {
                 break;
             case GLFW_KEY_4:
                 vulkan->color_ = Color::Black;
+                break;
+            case GLFW_KEY_UP:
+                vulkan->lineWidth_++;
+                break; 
+            case GLFW_KEY_DOWN:
+                vulkan->lineWidth_--;
+                vulkan->lineWidth_ = std::max(1.0f, vulkan->lineWidth_);
                 break; 
             }
         }
@@ -101,8 +108,11 @@ void Vulkan::initWindow() {
                 vulkan->currCursor_.x = xpos;
                 vulkan->currCursor_.y = ypos;
             } else {
-                vulkan->prevCursor_.x = vulkan->currCursor_.x;
-                vulkan->prevCursor_.y = vulkan->currCursor_.y;
+                if (vulkan->prevCursorHandled_) {
+                    vulkan->prevCursor_.x = vulkan->currCursor_.x;
+                    vulkan->prevCursor_.y = vulkan->currCursor_.y;
+                    vulkan->prevCursorHandled_ = false;
+                }
                 vulkan->currCursor_.x = xpos;
                 vulkan->currCursor_.y = ypos;
             }
@@ -116,9 +126,6 @@ void Vulkan::initWindow() {
         auto& c = vulkan->currCursor_;
         auto& rp = vulkan->prevCursorRelative_;
         auto& rc = vulkan->currCursorRelative_;
-        char msg[128];
-        snprintf(msg, 128, "%.0f,%.0f   %.0f,%.0f", rp.x, rp.y, rc.x, rc.y);
-        // std::cout << msg << std::endl;
 
         auto camera = vulkan->camera_;
         camera->onMouseMovement(window, xpos, ypos);
@@ -127,10 +134,10 @@ void Vulkan::initWindow() {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
             if (action == GLFW_PRESS) {
-                std::cout << "-----------------------------------------" << std::endl;
                 glfwGetCursorPos(window, reinterpret_cast<double*>(&vulkan->currCursor_.x), reinterpret_cast<double*>(&vulkan->currCursor_.y));
                 vulkan->LeftButton_ = true;
                 vulkan->LeftButtonOnce_ = true;
+                vulkan->prevCursorHandled_ = true;
             } else {
                 vulkan->ok_ = false;
                 vulkan->LeftButton_ = false;
@@ -1231,6 +1238,7 @@ void Vulkan::updateDrawAssets() {
         }
 
         changePoint();
+        prevCursorHandled_ = true;
 
         VkDeviceSize size = sizeof(Line::Point) * lineVertices_[currentFrame_].size();
 
@@ -1539,6 +1547,7 @@ void Vulkan::changePoint() {
     by -= lineWidth_ / 2.0f;
     ey += lineWidth_ / 2.0f;
 
+#ifdef DEBUG_CHANGE_POINT
     std::cout << "------change point------" << std::endl;
     std::cout << "delx: " << deltaX << std::endl;
     std::cout << "dely: " << deltaY << std::endl;
@@ -1548,6 +1557,7 @@ void Vulkan::changePoint() {
     std::cout << "e   : " << ex << ',' << ey << std::endl;
     std::cout << "prev: " << prevCursorRelative_.x << ',' << prevCursorRelative_.y << std::endl;
     std::cout << "curr: " << currCursorRelative_.x << ',' << currCursorRelative_.y << std::endl;
+#endif
 
 
     int t = 0;
@@ -1565,8 +1575,10 @@ void Vulkan::changePoint() {
             }
         }
 
+#ifdef DEBUG_CHANGE_POINT
         std::cout << "aout: " << acount << std::endl;
         std::cout << "cout: " << t << std::endl;
+#endif
 
         return ;
     }
@@ -1581,49 +1593,10 @@ void Vulkan::changePoint() {
             }
         }
     }
-    std::cout << "aout: " << acount << std::endl;
-    std::cout << "cout: " << t << std::endl;
-}
-
-void Vulkan::processNetWork(const std::string& msg) {
-    auto [extent, position] = parseMsg(msg);
-    position.first = position.first / extent.first * swapChain_->width();
-    position.second = position.second / extent.second * swapChain_->height();
-
-    ok_ = true;
-    currCursor_.x = position.first;
-    currCursor_.y = position.second;
-}
-
-std::pair<std::pair<float, float>, std::pair<float, float>> Vulkan::parseMsg(const std::string& msg) {
-    float width = 0, height = 0, x = 0, y = 0;
-    size_t i = 0;
-    for (; i < msg.size(); i++) {
-        if (msg[i] == '-') {
-            break;
-        }
-        width = width * 10 + msg[i] - '0';
-    }
-    for (; i < msg.size(); i++) {
-        if (msg[i] == '-') {
-            break;
-        }
-        height = height * 10 + msg[i] - '0';
-    }
-    for (; i < msg.size(); i++) {
-        if (msg[i] == '-') {
-            break;
-        }
-        x = x * 10 + msg[i] - '0';
-    }
-    for (; i < msg.size(); i++) {
-        if (msg[i] == '-') {
-            break;
-        }
-        y = y * 10 + msg[i] - '0';
-    }
-
-    return {{width, height}, {x, y}};
+#ifdef DEBUG_CHANGE_POINT
+        std::cout << "aout: " << acount << std::endl;
+        std::cout << "cout: " << t << std::endl;
+#endif
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL Vulkan::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 
