@@ -12,7 +12,6 @@
 #include "Swapchain.h"
 #include "Tools.h"
 #include "vulkan/vulkan_core.h"
-#include <_mingw_stat64.h>
 #include <array>
 #include <cassert>
 #include <chrono>
@@ -65,6 +64,10 @@ void Vulkan::initWindow() {
     // glfwSetInputMode(windows_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetWindowUserPointer(windows_, this);
     glfwSetKeyCallback(windows_, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+        int inWindow = glfwGetWindowAttrib(window, GLFW_HOVERED);
+        if (!inWindow) {
+            return ;
+        }
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
 
         if (action == GLFW_PRESS) {
@@ -102,7 +105,8 @@ void Vulkan::initWindow() {
 
         if (vulkan->LeftButton_) {
             vulkan->ok_ = true;
-            if (vulkan->prevCursor_.x == -1 && vulkan->prevCursor_.y == -1) {
+            if (vulkan->LeftButtonOnce_) {
+                vulkan->LeftButtonOnce_ = false;
                 vulkan->prevCursor_.x = xpos;
                 vulkan->prevCursor_.y = ypos;
                 vulkan->currCursor_.x = xpos;
@@ -132,9 +136,9 @@ void Vulkan::initWindow() {
     });
     glfwSetMouseButtonCallback(windows_, [](GLFWwindow* window, int button, int action, int mods) {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
+
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
             if (action == GLFW_PRESS) {
-                glfwGetCursorPos(window, reinterpret_cast<double*>(&vulkan->currCursor_.x), reinterpret_cast<double*>(&vulkan->currCursor_.y));
                 vulkan->LeftButton_ = true;
                 vulkan->LeftButtonOnce_ = true;
                 vulkan->prevCursorHandled_ = true;
@@ -233,9 +237,6 @@ void Vulkan::pickPhysicalDevice() {
     for (const auto& device : physicalDevices) {
         VkPhysicalDeviceProperties pro;
         vkGetPhysicalDeviceProperties(device, &pro);
-        if (pro.deviceName[0] == 'A') {
-            continue;
-        }
         if (deviceSuitable(device)) {
             physicalDevice_ = device;
             msaaSamples_ = getMaxUsableSampleCount();
@@ -263,9 +264,7 @@ void Vulkan::createLogicDevice() {
 
     VkDeviceCreateInfo deviceInfo{};
     VkPhysicalDeviceFeatures features{};
-    features.wideLines = VK_TRUE;
-    features.sparseBinding = VK_TRUE;
-    features.samplerAnisotropy = VK_TRUE;
+    vkGetPhysicalDeviceFeatures(physicalDevice_, &features);
     deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     deviceInfo.queueCreateInfoCount = queueInfos.size();
     deviceInfo.pQueueCreateInfos = queueInfos.data();
@@ -578,16 +577,20 @@ void Vulkan::createVertex() {
     lineVertexBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
     lineIndexBuffers_.resize(MAX_FRAMES_IN_FLIGHT);  
     lineVerticesModify_.resize(MAX_FRAMES_IN_FLIGHT, 0);
+    // lineVertexMaps_.resize(MAX_FRAMES_IN_FLIGHT);
     lineVertexMaps_.resize(MAX_FRAMES_IN_FLIGHT);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         auto t = line_->initVertices(swapChain_->width(), swapChain_->height());
         lineVertices_[i] = t.first;
         lineIndices_[i] = t.second;
+        lineVertexMaps_[i].resize(lineVertices_[i].size());
 
         for (size_t j = 0; j < lineVertices_[i].size(); j++) {
-            auto key = std::make_pair(lineVertices_[i][j].position_.x, lineVertices_[i][j].position_.y);
-            lineVertexMaps_[i][key] = j;
+            int x = lineVertices_[i][j].position_.x, y = lineVertices_[i][j].position_.y;
+            x += swapChain_->width() / 2;
+            y += swapChain_->height() / 2;
+            lineVertexMaps_[i][y * swapChain_->width() + x] = j;
         }
     }
 
@@ -1101,7 +1104,7 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
 
 void Vulkan::draw() {
     timer_.tick();
-    camera_->setDeltaTime(timer_.delta());
+    camera_->setDeltaTime(timer_.deltaMilliseconds());
 
     vkWaitForFences(device_, 1, inFlightFences_[currentFrame_]->fencePtr(), VK_TRUE, UINT64_MAX);
 
@@ -1281,7 +1284,6 @@ void Vulkan::recreateSwapChain() {
     createVertex();
     createVertexBuffer();
     createIndexBuffer();
-
     // {
     //     auto t = canvas_->vertices(swapChain_->width(), swapChain_->height());
     //     canvasVertices_ = t.first;
@@ -1567,9 +1569,12 @@ void Vulkan::changePoint() {
         for (int x = bx; x <= ex; x++) {
             for (int y = by; y <= ey; y++) {
                 acount++;
+                if (!validPoint(x, y)) {
+                    continue;
+                }
                 if (std::abs(x - currCursorRelative_.x) <= lineWidth_) {
                     t++;
-                    auto index = lineVertexMaps_[currentFrame_][std::make_pair(x, y)];
+                    auto index = lineVertexMaps_[currentFrame_][(y + swapChain_->height() / 2) * swapChain_->width() + (x + swapChain_->width() / 2)];
                     fillColor(index);
                 }
             }
@@ -1586,9 +1591,12 @@ void Vulkan::changePoint() {
     for (int x = bx; x <= ex; x++) {
         for (int y = by; y <= ey; y++) {
             acount++;
+            if (!validPoint(x, y)) {
+                continue;
+            }
             if (Tools::pointToLineLength(a, b, x, y) <= lineWidth_) {
                 t++;
-                auto index = lineVertexMaps_[currentFrame_][std::make_pair(x, y)];
+                auto index = lineVertexMaps_[currentFrame_][(y + swapChain_->height() / 2) * swapChain_->width() + (x + swapChain_->width() / 2)];
                 fillColor(index);
             }
         }
@@ -1597,6 +1605,13 @@ void Vulkan::changePoint() {
         std::cout << "aout: " << acount << std::endl;
         std::cout << "cout: " << t << std::endl;
 #endif
+}
+
+bool Vulkan::validPoint(int x, int y) {
+    auto width = static_cast<int32_t>(swapChain_->width()), height = static_cast<int32_t>(swapChain_->height());
+    auto res =  (x <= width / 2) && (x >= -width / 2) && (y <= height / 2) && (y >= -height / 2);
+
+    return res;
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL Vulkan::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 

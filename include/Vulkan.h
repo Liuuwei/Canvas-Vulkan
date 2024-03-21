@@ -11,6 +11,7 @@
 #include "Vertex.h"
 #include "ktx.h"
 #include "vulkan/vulkan_core.h"
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <utility>
@@ -19,8 +20,9 @@
 
 #include <string>
 #include <vector>
-#include <map>
 #include <memory>
+#include <unordered_map>
+#include <functional>
 
 #include "Tools.h"
 #include "DescriptorSetLayout.h"
@@ -90,6 +92,7 @@ private:
     void createBrushPipeline();
     void createCanvasPipeline();
     void changePoint();
+    bool validPoint(int x, int y);
     
     GLFWwindow* windows_;
     uint32_t width_;
@@ -198,7 +201,7 @@ private:
     std::vector<std::unique_ptr<Buffer>> lineVertexBuffers_;
     std::vector<std::unique_ptr<Buffer>> lineIndexBuffers_;
     std::vector<std::vector<std::pair<uint32_t, uint32_t>>> lineOffsets_;
-    std::vector<std::map<std::pair<int, int>, uint32_t>> lineVertexMaps_;
+    std::vector<std::vector<uint32_t>> lineVertexMaps_;
     std::vector<long long> lineVerticesModify_;
     float lineWidth_ = 1.0f;
     bool LeftButton_ = false;
@@ -236,4 +239,11 @@ private:
         alignas(16) glm::mat4 view_;
         alignas(16) glm::mat4 proj_;
     };
+};
+
+template<>
+struct std::hash<std::pair<int, int>> {
+    size_t operator() (const std::pair<int, int>& pair) const {
+        return std::hash<int>()(pair.first) ^ std::hash<int>()(pair.second);
+    }
 };
