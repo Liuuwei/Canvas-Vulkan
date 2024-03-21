@@ -5,10 +5,11 @@
 class Timer {
 public:
     Timer();
-    void tick();
-    float delta() const;
 
+    void tick();
+    unsigned long long deltaMilliseconds() const;
+    static unsigned long long nowMilliseconds();
 private:
-    std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> prevTime_;
-    std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> currentTime_;
+    std::chrono::time_point<std::chrono::high_resolution_clock> prevTime_;
+    std::chrono::time_point<std::chrono::high_resolution_clock> currentTime_;
 };

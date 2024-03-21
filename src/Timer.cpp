@@ -10,6 +10,10 @@ void Timer::tick() {
     currentTime_ = std::chrono::high_resolution_clock::now();
 }
 
-float Timer::delta() const {
-    return std::chrono::duration<float, std::chrono::seconds::period>(currentTime_ - prevTime_).count();
+unsigned long long Timer::deltaMilliseconds() const {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(currentTime_ - prevTime_).count();
+}
+
+unsigned long long Timer::nowMilliseconds() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
 }
