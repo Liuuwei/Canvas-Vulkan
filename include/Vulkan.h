@@ -37,6 +37,7 @@
 #include "Camera.h"
 #include "Timer.h"
 #include "Line.h"
+#include "Font.h"
 
 class Vulkan {
 public:
@@ -216,6 +217,19 @@ private:
     bool ok_ = false;
     
     int times_ = 0;
+
+    std::unique_ptr<Font> font_;
+    const std::string fontPath_ = "../fonts/jbMono.ttf";
+    std::unordered_map<char, Font::Character> dictionary_;
+    std::unique_ptr<PipelineLayout> fontPipelineLayout_;
+    std::unique_ptr<Pipeline> fontPipeline_;
+    std::unique_ptr<DescriptorPool> fontDescriptorPool_;
+    std::unique_ptr<DescriptorSetLayout> fontDescriptorSetLayout_;
+    VkDescriptorSet fontDescriptorSet_;
+    std::vector<Font::Point> fontVertices_;
+    std::vector<uint32_t> fontIndices_;
+    std::unique_ptr<Buffer> fontVertexBuffer_;
+    std::unique_ptr<Buffer> fontIndexBuffer_;
 
     enum Color {
         Write, 

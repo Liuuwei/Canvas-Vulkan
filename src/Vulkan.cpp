@@ -1284,67 +1284,6 @@ void Vulkan::recreateSwapChain() {
     createVertex();
     createVertexBuffer();
     createIndexBuffer();
-    // {
-    //     auto t = canvas_->vertices(swapChain_->width(), swapChain_->height());
-    //     canvasVertices_ = t.first;
-    //     canvasIndices_ = t.second;
-    // }
-
-    // {
-    //     VkDeviceSize size = sizeof(float) * canvasVertices_.size();
-
-    //     canvasVertexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
-    //     canvasVertexBuffer_->size_ = size;
-    //     canvasVertexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    //     canvasVertexBuffer_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    //     canvasVertexBuffer_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-    //     canvasVertexBuffer_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-    //     canvasVertexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    //     canvasVertexBuffer_->init();
-
-    //     std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
-    //     staginBuffer->size_ = size;
-    //     staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    //     staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    //     staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-    //     staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-    //     staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    //     staginBuffer->init();
-
-    //     auto data = staginBuffer->map(size);
-    //     memcpy(data, canvasVertices_.data(), size);
-    //     staginBuffer->unMap();
-
-    //     copyBuffer(staginBuffer->buffer(), canvasVertexBuffer_->buffer(), size);
-    // }
-
-    // {
-    //     VkDeviceSize size = sizeof(canvasIndices_[0]) * canvasIndices_.size();
-
-    //     canvasIndexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
-    //     canvasIndexBuffer_->size_ = size;
-    //     canvasIndexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    //     canvasIndexBuffer_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    //     canvasIndexBuffer_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-    //     canvasIndexBuffer_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-    //     canvasIndexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    //     canvasIndexBuffer_->init();
-
-    //     std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
-    //     staginBuffer->size_ = size;
-    //     staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    //     staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-    //     staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-    //     staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-    //     staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    //     staginBuffer->init();
-
-    //     auto data = staginBuffer->map(size);
-    //     memcpy(data, canvasIndices_.data(), size);
-    //     staginBuffer->unMap();
-
-    //     copyBuffer(staginBuffer->buffer(), canvasIndexBuffer_->buffer(), size);
-    // }
 
     {
         auto data = canvasUniformBuffer_->map(sizeof(UniformBufferObject));
@@ -1352,6 +1291,74 @@ void Vulkan::recreateSwapChain() {
         ubo.proj_ = glm::ortho(-static_cast<float>(swapChain_->width() / 2.0f), static_cast<float>(swapChain_->width() / 2.0f), -static_cast<float>(swapChain_->height() / 2.0), static_cast<float>(swapChain_->height() / 2.0f));
         memcpy(data, &ubo, sizeof(UniformBufferObject));
         canvasUniformBuffer_->unMap();
+    }
+}
+
+void Vulkan::loadChars() {
+    font_ = std::make_unique<Font>(fontPath_.c_str(), 32);
+
+    for (char c = 'a'; c <= 'z'; c++) {
+        font_->loadChar(c);
+        auto& currentChar = dictionary_[c];
+
+        auto pixel = font_->bitmap().buffer;
+        auto texWidth = font_->bitmap().width;
+        auto texHeight = font_->bitmap().rows;
+        auto offsetX = font_->glyph()->bitmap_left;
+        auto offsetY = font_->glyph()->bitmap_top;
+        auto advance = font_->glyph()->advance.x / 64;
+        VkDeviceSize size = texWidth * texHeight * 1;
+
+        currentChar.char_ = c;
+        currentChar.offsetX_ = offsetX;
+        currentChar.offsetY_ = offsetY;
+        currentChar.width_ = texWidth;
+        currentChar.height_ = texHeight;
+        currentChar.advance_ = advance;
+        currentChar.color_ = glm::vec3(0.0f, 0.0f, 0.0f);
+        currentChar.index_ = static_cast<uint32_t>(c - 'a');
+
+        auto& image = currentChar.image_;        
+        image = std::make_unique<Image>(physicalDevice_, device_);
+        image->imageType_ = VK_IMAGE_TYPE_2D;
+        image->arrayLayers_ = 1;
+        image->mipLevles_ = 1;
+        image->format_ = VK_FORMAT_R8_UNORM;
+        image->extent_ = {texWidth, texHeight, 1};
+        image->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        image->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        image->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        image->tiling_ = VK_IMAGE_TILING_OPTIMAL;
+        image->usage_ = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        image->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        image->viewType_ = VK_IMAGE_VIEW_TYPE_2D;
+        image->samples_ = msaaSamples_;
+        image->subresourcesRange_ = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        image->init();
+
+        Buffer staginBuffer(physicalDevice_, device_);
+        staginBuffer.size_ = size;
+        staginBuffer.queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        staginBuffer.pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        staginBuffer.sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        staginBuffer.usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        staginBuffer.memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        staginBuffer.init();
+
+        auto data = staginBuffer.map(size);
+        memcpy(data, pixel, size);
+        staginBuffer.unMap();
+
+        VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkBufferImageCopy region{};
+        region.imageExtent = {texWidth, texHeight, 1};
+        region.imageSubresource = {1, 0, 0, 1};
+
+        auto cmdBuffer = beginSingleTimeCommands();
+            Tools::setImageLayout(cmdBuffer, image->image(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, range, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            vkCmdCopyBufferToImage(cmdBuffer, staginBuffer.buffer(), image->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            Tools::setImageLayout(cmdBuffer, image->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, range, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        endSingleTimeCommands(cmdBuffer, transferQueue_);
     }
 }
 
