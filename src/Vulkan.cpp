@@ -16,6 +16,7 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <format>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -103,6 +104,9 @@ void Vulkan::initWindow() {
             if (action == GLFW_PRESS) {
                 vulkan->inputText_ ^= 1;
                 if (!vulkan->inputText_) {
+                    if (vulkan->text_.size()) {
+                        vulkan->processText();
+                    }
                     vulkan->text_.clear();
                 }
             }
@@ -112,10 +116,19 @@ void Vulkan::initWindow() {
 
         if (vulkan->inputText_) {
             if (action == GLFW_PRESS) {
-                if (key == GLFW_KEY_BACKSPACE && vulkan->text_.size()) {
-                    vulkan->text_.pop_back();
+                if (key == GLFW_KEY_BACKSPACE) {
+                    if (vulkan->text_.size()) {
+                        vulkan->text_.pop_back();
+                    }
+                } else if (key == GLFW_KEY_CAPS_LOCK) {
+                    vulkan->capsLock_ ^= 1;
                 } else {
-                    vulkan->text_.push_back(Tools::keyToChar(key));
+                    std::cout << key << std::endl;
+                    auto c = Tools::keyToChar(key);
+                    if (!vulkan->capsLock_) {
+                        c += 32;
+                    }
+                    vulkan->text_.push_back(c);
                 }
             }
         }
@@ -640,9 +653,10 @@ void Vulkan::createTextDescriptorSet() {
     bufferInfo.range = sizeof(UniformBufferObject);
 
     
-    std::vector<VkDescriptorImageInfo> imageInfos(26);
-    for (size_t i = 0; i < 26; i++) {
-        imageInfos[i].imageView = dictionary_[i + 'a'].image_->view();
+    std::vector<VkDescriptorImageInfo> imageInfos(dictionary_.size());
+    for (uint32_t i = 0; i < 128; i++) {
+        char c = static_cast<char>(i);
+        imageInfos[i].imageView = dictionary_[c].image_->view();
         imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfos[i].sampler = canvasSampler_->sampler();
     }
@@ -773,10 +787,9 @@ void Vulkan::createBrushPipeline() {
     VkPipelineRasterizationStateCreateInfo rasterizaInfo{};
     rasterizaInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizaInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    // rasterizaInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizaInfo.cullMode = VK_CULL_MODE_NONE;
     rasterizaInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rasterizaInfo.lineWidth = 5.0f;
+    rasterizaInfo.lineWidth = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo multipleInfo{};
     multipleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -1401,6 +1414,11 @@ void Vulkan::draw() {
 }
 
 void Vulkan::loadAssets() {
+    loadTextures();
+    loadChars();
+}
+
+void Vulkan::loadTextures() {
     int texWidth, texHeight, texChannels;
     auto pixel = stbi_load(canvasTexturePath_.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     if (!pixel) {
@@ -1453,8 +1471,88 @@ void Vulkan::loadAssets() {
         Tools::setImageLayout(cmdBuffer, canvasImage_->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, range, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
         
     endSingleTimeCommands(cmdBuffer, transferQueue_);
+}
 
-    loadChars();
+void Vulkan::loadChars() {
+    font_ = std::make_unique<Font>(fontPath_.c_str(), 32);
+
+    for (uint32_t i = 0; i < 128; i++) {
+        char c = static_cast<char>(i);
+        font_->loadChar(c);
+        auto& currentChar = dictionary_[c];
+
+        auto pixel = font_->bitmap().buffer;
+        auto texWidth = font_->bitmap().width;
+        auto texHeight = font_->bitmap().rows;
+        auto offsetX = font_->glyph()->bitmap_left;
+        auto offsetY = font_->glyph()->bitmap_top;
+        auto advance = font_->glyph()->advance.x / 64;
+        VkDeviceSize size = texWidth * texHeight * 1;
+
+        if (pixel == nullptr) {
+            texWidth = 15;
+            texHeight = 18;
+            offsetX = 2;
+            offsetY = 18;
+            advance = 19;
+            size = texWidth * texHeight * 1;
+        }
+
+        currentChar.char_ = c;
+        currentChar.offsetX_ = offsetX;
+        currentChar.offsetY_ = offsetY;
+        currentChar.width_ = texWidth;
+        currentChar.height_ = texHeight;
+        currentChar.advance_ = advance;
+        currentChar.color_ = glm::vec3(0.0f, 0.0f, 0.0f);
+        currentChar.index_ = i;
+
+        auto& image = currentChar.image_;        
+        image = std::make_unique<Image>(physicalDevice_, device_);
+        image->imageType_ = VK_IMAGE_TYPE_2D;
+        image->arrayLayers_ = 1;
+        image->mipLevles_ = 1;
+        image->format_ = VK_FORMAT_R8_UNORM;
+        image->extent_ = {texWidth, texHeight, 1};
+        image->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        image->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        image->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        image->tiling_ = VK_IMAGE_TILING_OPTIMAL;
+        image->usage_ = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        image->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        image->viewType_ = VK_IMAGE_VIEW_TYPE_2D;
+        image->samples_ = VK_SAMPLE_COUNT_1_BIT;
+        image->subresourcesRange_ = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        image->init();
+
+        Buffer staginBuffer(physicalDevice_, device_);
+        staginBuffer.size_ = size;
+        staginBuffer.queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        staginBuffer.pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        staginBuffer.sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+        staginBuffer.usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        staginBuffer.memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        staginBuffer.init();
+
+        auto data = staginBuffer.map(size);
+        if (pixel == nullptr) {
+            memset(data, 0, size);
+        } else {
+            memcpy(data, pixel, size);
+        }
+        staginBuffer.unMap();
+
+        VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VkBufferImageCopy region{};
+        region.imageExtent = {texWidth, texHeight, 1};
+        region.imageSubresource = {1, 0, 0, 1};
+
+        auto cmdBuffer = beginSingleTimeCommands();
+            Tools::setImageLayout(cmdBuffer, image->image(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, range, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            vkCmdCopyBufferToImage(cmdBuffer, staginBuffer.buffer(), image->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            Tools::setImageLayout(cmdBuffer, image->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, range, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        endSingleTimeCommands(cmdBuffer, transferQueue_);
+    }
 }
 
 void Vulkan::updateDrawAssets() {
@@ -1586,73 +1684,7 @@ void Vulkan::recreateSwapChain() {
     }
 }
 
-void Vulkan::loadChars() {
-    font_ = std::make_unique<Font>(fontPath_.c_str(), 32);
 
-    for (char c = 'a'; c <= 'z'; c++) {
-        font_->loadChar(c);
-        auto& currentChar = dictionary_[c];
-
-        auto pixel = font_->bitmap().buffer;
-        auto texWidth = font_->bitmap().width;
-        auto texHeight = font_->bitmap().rows;
-        auto offsetX = font_->glyph()->bitmap_left;
-        auto offsetY = font_->glyph()->bitmap_top;
-        auto advance = font_->glyph()->advance.x / 64;
-        VkDeviceSize size = texWidth * texHeight * 1;
-
-        currentChar.char_ = c;
-        currentChar.offsetX_ = offsetX;
-        currentChar.offsetY_ = offsetY;
-        currentChar.width_ = texWidth;
-        currentChar.height_ = texHeight;
-        currentChar.advance_ = advance;
-        currentChar.color_ = glm::vec3(0.0f, 0.0f, 0.0f);
-        currentChar.index_ = static_cast<uint32_t>(c - 'a');
-
-        auto& image = currentChar.image_;        
-        image = std::make_unique<Image>(physicalDevice_, device_);
-        image->imageType_ = VK_IMAGE_TYPE_2D;
-        image->arrayLayers_ = 1;
-        image->mipLevles_ = 1;
-        image->format_ = VK_FORMAT_R8_UNORM;
-        image->extent_ = {texWidth, texHeight, 1};
-        image->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-        image->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-        image->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-        image->tiling_ = VK_IMAGE_TILING_OPTIMAL;
-        image->usage_ = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        image->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        image->viewType_ = VK_IMAGE_VIEW_TYPE_2D;
-        image->samples_ = VK_SAMPLE_COUNT_1_BIT;
-        image->subresourcesRange_ = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        image->init();
-
-        Buffer staginBuffer(physicalDevice_, device_);
-        staginBuffer.size_ = size;
-        staginBuffer.queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-        staginBuffer.pQueueFamilyIndices_ = queueFamilies_.sets().data();
-        staginBuffer.sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-        staginBuffer.usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        staginBuffer.memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        staginBuffer.init();
-
-        auto data = staginBuffer.map(size);
-        memcpy(data, pixel, size);
-        staginBuffer.unMap();
-
-        VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-        VkBufferImageCopy region{};
-        region.imageExtent = {texWidth, texHeight, 1};
-        region.imageSubresource = {1, 0, 0, 1};
-
-        auto cmdBuffer = beginSingleTimeCommands();
-            Tools::setImageLayout(cmdBuffer, image->image(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, range, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-            vkCmdCopyBufferToImage(cmdBuffer, staginBuffer.buffer(), image->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-            Tools::setImageLayout(cmdBuffer, image->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, range, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-        endSingleTimeCommands(cmdBuffer, transferQueue_);
-    }
-}
 
 bool Vulkan::checkValidationLayerSupport()  {
     uint32_t count = 0;
@@ -1915,6 +1947,15 @@ bool Vulkan::validPoint(int x, int y) {
     auto res =  (x <= width / 2) && (x >= -width / 2) && (y <= height / 2) && (y >= -height / 2);
 
     return res;
+}
+
+void Vulkan::processText() {
+    std::cout << text_ << std::endl;
+    if (text_.size() > 4 && text_.substr(0, 5) == "load:") {
+        auto resource = Tools::rmSpace({text_.begin() + 5, text_.end()});
+        std::cout << resource << std::endl;
+        canvasTexturePath_ = "../textures/" + Tools::rmSpace({text_.begin() + 5, text_.end()});
+    }
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL Vulkan::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 
