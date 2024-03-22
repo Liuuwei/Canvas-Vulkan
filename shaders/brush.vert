@@ -17,5 +17,6 @@ layout(location = 0) out struct {
 
 void main() {
     gl_Position =  ubo.proj * vec4(inPosition, 0.0, 1.0);
+    gl_PointSize = 1.0;
     outValue.color = inColor;
 }
