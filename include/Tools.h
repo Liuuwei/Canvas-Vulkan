@@ -36,6 +36,10 @@ struct QueueFamilyIndices {
         return {unique.begin(), unique.end()};
     }
 
+    VkSharingMode sharingMode() const {
+        return multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+    }
+
     static QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) {
         QueueFamilyIndices indices;
 
