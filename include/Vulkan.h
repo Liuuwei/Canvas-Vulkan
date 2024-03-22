@@ -119,7 +119,7 @@ private:
 
     std::unique_ptr<DescriptorPool> brushDescriptorPool_;
     std::unique_ptr<DescriptorSetLayout> brushDescriptorSetLayout_;
-    std::vector<VkDescriptorSet> brushDescriptorSets_;
+    VkDescriptorSet brushDescriptorSets_;
 
     std::unique_ptr<DescriptorPool> canvasDescriptorPool_;
     std::unique_ptr<DescriptorSetLayout> canvasDescriptorSetLayout_;
@@ -138,11 +138,11 @@ private:
     std::vector<std::unique_ptr<FrameBuffer>> frameBuffers_;
 
     std::unique_ptr<CommandPool> commandPool_;
-    std::vector<std::unique_ptr<CommandBuffer>> commandBuffers_;
+    std::unique_ptr<CommandBuffer> commandBuffers_;
 
-    std::vector<std::unique_ptr<Fence>> inFlightFences_;
-    std::vector<std::unique_ptr<Semaphore>> imageAvaiableSemaphores_;
-    std::vector<std::unique_ptr<Semaphore>> renderFinishSemaphores_;
+    std::unique_ptr<Fence> inFlightFences_;
+    std::unique_ptr<Semaphore> imageAvaiableSemaphores_;
+    std::unique_ptr<Semaphore> renderFinishSemaphores_;
 
     const std::string skyBoxPath_ = "../textures/skybox.ktx";
     ktxTexture* skyBoxTexture_;
@@ -157,10 +157,7 @@ private:
     const std::vector<const char*> validationLayers_ = {"VK_LAYER_KHRONOS_validation"};
     const std::vector<const char*> deviceExtensions_ = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-
-    uint32_t currentFrame_ = 0;
-
-    std::vector<std::unique_ptr<Buffer>> uniformBuffers_;
+    std::unique_ptr<Buffer> uniformBuffers_;
 
     std::shared_ptr<Camera> camera_;
     Timer timer_;
@@ -187,23 +184,19 @@ private:
         app->resized_ = true;
     }
 
-    static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
-
-    std::unique_ptr<Vertex> canvas_;
-    std::vector<float> canvasVertices_;
+    std::unique_ptr<Plane> canvas_;
+    std::vector<Plane::Point> canvasVertices_;
     std::vector<uint32_t> canvasIndices_;
     std::unique_ptr<Buffer> canvasVertexBuffer_;
     std::unique_ptr<Buffer> canvasIndexBuffer_;
     std::unique_ptr<Buffer> canvasUniformBuffer_;
 
     std::unique_ptr<Line> line_;
-    std::vector<std::vector<Line::Point>> lineVertices_;
-    std::vector<std::vector<uint32_t>> lineIndices_;
-    std::vector<std::unique_ptr<Buffer>> lineVertexBuffers_;
-    std::vector<std::unique_ptr<Buffer>> lineIndexBuffers_;
-    std::vector<std::vector<std::pair<uint32_t, uint32_t>>> lineOffsets_;
-    std::vector<std::vector<uint32_t>> lineVertexMaps_;
-    std::vector<long long> lineVerticesModify_;
+    std::vector<Line::Point> lineVertices_;
+    std::vector<uint32_t> lineIndices_;
+    std::unique_ptr<Buffer> lineVertexBuffers_;
+    std::unique_ptr<Buffer> lineIndexBuffers_;
+    std::vector<uint32_t> lineVertexMaps_;
     float lineWidth_ = 1.0f;
     bool LeftButton_ = false;
     bool LeftButtonOnce_ = false;
@@ -230,6 +223,9 @@ private:
     std::vector<uint32_t> fontIndices_;
     std::unique_ptr<Buffer> fontVertexBuffer_;
     std::unique_ptr<Buffer> fontIndexBuffer_;
+
+    bool inputText_ = false;
+    std::string text_;
 
     enum Color {
         Write, 
