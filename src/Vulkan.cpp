@@ -221,6 +221,7 @@ void Vulkan::createInstance() {
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     Tools::populateDebugMessengerCreateInfo(debugCreateInfo, debugCallback);
     creatInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    creatInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
     creatInfo.pApplicationInfo = &appInfo;
     creatInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers_.size());
     creatInfo.ppEnabledLayerNames = validationLayers_.data();
@@ -1677,6 +1678,10 @@ bool Vulkan::checkDeviceExtensionsSupport(VkPhysicalDevice physicalDevice)  {
     std::unordered_set<std::string> requested(deviceExtensions_.begin(), deviceExtensions_.end());
     for (const auto& avaliable : avaliables) {
         requested.erase(avaliable.extensionName);
+    }
+
+    for (auto& t : requested) {
+        std::cout << t << std::endl;
     }
 
     return requested.empty();
