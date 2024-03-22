@@ -75,12 +75,13 @@ private:
     void loadAssets();
     void updateDrawAssets();
     void recreateSwapChain();
-    void loadChars();
 
 private:
     bool checkValidationLayerSupport() ;
     bool checkDeviceExtensionsSupport(VkPhysicalDevice physicalDevice);
     bool deviceSuitable(VkPhysicalDevice);
+    void loadTextures();
+    void loadChars();
     VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
     VkSampleCountFlagBits getMaxUsableSampleCount();
     VkFormat findDepthFormat();
@@ -109,6 +110,8 @@ private:
 
     void changePoint();
     bool validPoint(int x, int y);
+
+    void processText();
     
     GLFWwindow* windows_;
     uint32_t width_;
@@ -159,11 +162,11 @@ private:
     std::unique_ptr<Semaphore> imageAvaiableSemaphores_;
     std::unique_ptr<Semaphore> renderFinishSemaphores_;
 
-    const std::string skyBoxPath_ = "../textures/skybox.ktx";
+    std::string skyBoxPath_ = "../textures/skybox.ktx";
     ktxTexture* skyBoxTexture_;
     std::unique_ptr<Image> skyBoxImage_;
 
-    const std::string canvasTexturePath_ = "../textures/canvas-texture.jpg";
+    std::string canvasTexturePath_ = "../textures/canvas-texture1.jpg";
     std::unique_ptr<Image> canvasImage_;
 
     Tools::QueueFamilyIndices queueFamilies_;
@@ -240,6 +243,7 @@ private:
     std::unique_ptr<Buffer> fontIndexBuffer_;
 
     int inputText_ = 0;
+    int capsLock_ = 0;
     std::string text_;
 
     enum Color {
