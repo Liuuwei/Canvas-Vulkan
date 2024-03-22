@@ -40,19 +40,24 @@ public:
     }
 
     struct Point {
+        Point(float x, float y, float r, float g, float b, float u, float v) :
+            position_(x, y), color_(r, g, b), texCoord_(u, v) {}
+        Point(glm::vec2 position, glm::vec3 color, glm::vec2 texCoord) : 
+            position_(position), color_(color), texCoord_(texCoord) {}
+
         glm::vec2 position_;
         glm::vec3 color_;
         glm::vec2 texCoord_;
     };
 
-    std::pair<std::vector<float>, std::vector<uint32_t>> vertices(float width, float height) const override {
+    static std::pair<std::vector<Point>, std::vector<uint32_t>> vertices(float x, float y, float width, float height, glm::vec3 color = glm::vec3(0.0f, 0.0f, 0.0f)) {
         auto w2 = width / 2.0f, h2 = height / 2.0f;
 
-        std::vector<float> vertices = {
-            -w2, h2, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 
-            w2, h2, 1.0f, 1.0f, 1.0f,  1.0f, 1.0f, 
-            -w2, -h2, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 
-            w2, -h2, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 
+        std::vector<Point> vertices = {
+            {x - w2, y + h2, color.x, color.y, color.z, 0.0f, 1.0f}, 
+            {x + w2, y + h2, color.x, color.y, color.z,  1.0f, 1.0f}, 
+            {x - w2, y - h2, color.x, color.y, color.z, 0.0f, 0.0f}, 
+            {x + w2, y - h2, color.x, color.y, color.z, 1.0f, 0.0f}, 
         };
 
         std::vector<uint32_t> indices = {
