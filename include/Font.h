@@ -113,6 +113,10 @@ public:
             center.y = y + dictionary.at(c).offsetY_ - dictionary.at(c).height_ / 2.0f;
             auto t = Font::vertices(center.x, center.y, dictionary.at(c), dictionary.at(c).color_);
             
+            for (auto& point : t.first) {
+                point.texCoord_.y = 1.0f - point.texCoord_.y;
+            }
+
             pointAndIndex = Font::mergeVertices(pointAndIndex, t);
 
             x += dictionary.at(c).advance_;
