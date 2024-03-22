@@ -92,6 +92,7 @@ private:
     void fillColor(uint32_t index);
     void createBrushPipeline();
     void createCanvasPipeline();
+    void createTextPipeline();
     void changePoint();
     bool validPoint(int x, int y);
     
@@ -224,7 +225,7 @@ private:
     std::unique_ptr<Buffer> fontVertexBuffer_;
     std::unique_ptr<Buffer> fontIndexBuffer_;
 
-    bool inputText_ = false;
+    int inputText_ = 0;
     std::string text_;
 
     enum Color {
