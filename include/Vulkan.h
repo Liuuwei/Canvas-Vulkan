@@ -90,9 +90,23 @@ private:
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue);
     void fillColor(uint32_t index);
+
     void createBrushPipeline();
     void createCanvasPipeline();
     void createTextPipeline();
+
+    void createBrushDescriptorPool();
+    void createTextDescriptorPool();
+    void createCanvasDescriptorPool();
+
+    void createBrushDescriptorSetLayout();
+    void createTextDescriptorSetLayout();
+    void createCanvasDescriptorSetLayout();
+
+    void createBrushDescriptorSet();
+    void createTextDescriptorSet();
+    void createCanvasDescriptorSet();
+
     void changePoint();
     bool validPoint(int x, int y);
     
