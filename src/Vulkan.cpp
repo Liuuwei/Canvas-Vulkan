@@ -11,6 +11,7 @@
 #include "PipelineLayout.h"
 #include "Swapchain.h"
 #include "Tools.h"
+#include "glm/ext/vector_uint2.hpp"
 #include "vulkan/vulkan_core.h"
 #include <array>
 #include <cassert>
@@ -108,6 +109,8 @@ void Vulkan::initWindow() {
                         vulkan->processText();
                     }
                     vulkan->text_.clear();
+                } else {
+                    vulkan->text_.push_back(':');
                 }
             }
 
@@ -116,18 +119,25 @@ void Vulkan::initWindow() {
 
         if (vulkan->inputText_) {
             if (action == GLFW_PRESS) {
+                char c;
                 if (key == GLFW_KEY_BACKSPACE) {
-                    if (vulkan->text_.size()) {
+                    if (vulkan->text_.size() > 1) {
                         vulkan->text_.pop_back();
                     }
                 } else if (key == GLFW_KEY_CAPS_LOCK) {
-                    vulkan->capsLock_ ^= 1;
-                } else {
-                    auto c = Tools::keyToChar(key);
-                    if (c >= 'A' && c <= 'Z' && !vulkan->capsLock_) {
-                        c += 32;
+                        vulkan->capsLock_ ^= 1;
+                } else if (key >= 0 && key <= 127) {
+                    if (mods == GLFW_MOD_SHIFT) {
+                        c = Tools::charToShiftChar(Tools::keyToChar(key));
+                    } else {
+                        if (!vulkan->capsLock_ && key >= 'A' && key <= 'Z') {
+                            key += 32; 
+                        }
+                        c = Tools::keyToChar(key);
                     }
-                    vulkan->text_.push_back(c);
+                    if (key != 340) {
+                        vulkan->text_.push_back(c);
+                    }
                 }
             }
         }
@@ -1594,7 +1604,7 @@ void Vulkan::updateDrawAssets() {
 
     {   
         if (inputText_ && text_.size()) {
-            auto t = font_->generateText(-400, -300, text_, dictionary_);
+            auto t = font_->generateText(-static_cast<float>(swapChain_->width()) / 2.0f, -static_cast<float>(swapChain_->height()) / 2.0f, text_, dictionary_);
             fontVertices_ = t.first;
             fontIndices_ = t.second;
             
@@ -1713,10 +1723,6 @@ bool Vulkan::checkDeviceExtensionsSupport(VkPhysicalDevice physicalDevice)  {
     std::unordered_set<std::string> requested(deviceExtensions_.begin(), deviceExtensions_.end());
     for (const auto& avaliable : avaliables) {
         requested.erase(avaliable.extensionName);
-    }
-
-    for (auto& t : requested) {
-        std::cout << t << std::endl;
     }
 
     return requested.empty();
@@ -1953,18 +1959,19 @@ bool Vulkan::validPoint(int x, int y) {
 }
 
 void Vulkan::processText() {
-    std::cout << std::format("process text: {}", text_) << std::endl;
-    if (text_.size() >= 4 && text_.substr(0, 4) == "load") {
-        auto resource = Tools::rmSpace({text_.begin() + 4, text_.end()});
-        std::cout << std::format("resource: {}", resource) << std::endl;
-        updateCanvasTexturePath_ = "../textures/" + Tools::rmSpace({text_.begin() + 4, text_.end()});
+    if (text_.size() >= 6 && text_.substr(1, 5) == "load:") {
+        auto resource = Tools::rmSpace({text_.begin() + 6, text_.end()});
+        updateCanvasTexturePath_ = "../textures/" + Tools::rmSpace(resource);
         updateTexture();
     }
 }
 
 void Vulkan::updateTexture() {
     int texWidth, texHeight, texChannels;
+    auto start = Timer::nowMilliseconds();
     auto pixel = stbi_load(updateCanvasTexturePath_.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    auto end = Timer::nowMilliseconds();
+    std::cout << std::format("ms: {}", end - start);
     if (!pixel) {
         return ;
     }
