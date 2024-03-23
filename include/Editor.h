@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GLFW/glfw3.h"
 #include "glm/fwd.hpp"
 #include <cstdint>
 #include <vector>
@@ -14,10 +15,10 @@ public:
     };
 
     enum Direction {
-        Up, 
-        Down, 
-        Right, 
-        Left, 
+        Up = GLFW_KEY_UP, 
+        Down = GLFW_KEY_DOWN, 
+        Right = GLFW_KEY_RIGHT, 
+        Left = GLFW_KEY_LEFT, 
     };
 
     Editor(uint32_t width, uint32_t height, uint32_t lineHeight);
@@ -26,6 +27,7 @@ public:
     void enter();
     void backspace();
     void insertChar(char c);
+    void insertStr(const std::string& str);
     void delteChar();
     void moveCursor(Direction dir);
     void moveLimit();
