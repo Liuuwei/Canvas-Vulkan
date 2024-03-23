@@ -3,12 +3,11 @@
 #include "Tools.h"
 
 Buffer::Buffer(VkPhysicalDevice physicalDevice, VkDevice device) : physicalDevice_(physicalDevice), device_(device) {
-
 }
 
 Buffer::~Buffer() {
-    vkFreeMemory(device_, memory_, nullptr);
     vkDestroyBuffer(device_, buffer_, nullptr);
+    vkFreeMemory(device_, memory_, nullptr);
 }
 
 void Buffer::init() {
