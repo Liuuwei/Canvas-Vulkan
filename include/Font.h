@@ -5,13 +5,16 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <iostream>
 
 #include "Plane.h"
 #include "Image.h"
 #include "Vertex.h"
 #include "vulkan/vulkan_core.h"
+#include "Timer.h"
 
 #include <ft2build.h>
+#include <utility>
 #include FT_FREETYPE_H
 
 class Font : public Plane {  
@@ -73,11 +76,6 @@ public:
     };
 
     static std::pair<std::vector<Point>, std::vector<uint32_t>> vertices(float x, float y, const Character& character, glm::vec3 color) {
-        // x += character.offsetX_;
-        // y += character.offsetY_;
-        // x += character.width_ / 2.0f;
-        // y -= character.height_ / 2.0f;
-
         auto width = character.width_, height = character.height_;
         
         auto index = character.index_;
@@ -105,9 +103,9 @@ public:
         return p1;
     }
 
-    static PairPointIndex generateText(float x, float y, const std::string& text, const std::unordered_map<char, Character>& dictionary) {
-        PairPointIndex pointAndIndex;
-        for (auto& c : text) {
+    static PairPointIndex generateTextLine(float x, float y, const std::string& line, const std::unordered_map<char, Character>& dictionary) {
+        PairPointIndex result;
+        for (auto& c : line) {
             glm::vec2 center;
             center.x = x + dictionary.at(c).offsetX_ + dictionary.at(c).width_ / 2.0f;
             center.y = y + dictionary.at(c).offsetY_ - dictionary.at(c).height_ / 2.0f;
@@ -117,12 +115,26 @@ public:
                 point.texCoord_.y = 1.0f - point.texCoord_.y;
             }
 
-            pointAndIndex = Font::mergeVertices(pointAndIndex, t);
+            result = Font::mergeVertices(result, t);
 
             x += dictionary.at(c).advance_;
         }
 
-        return pointAndIndex;
+        return result;
+    }
+
+    static PairPointIndex generateTextLines(float x, float y, const std::vector<std::string>& lines, const std::unordered_map<char, Character>& dictionary, uint32_t lineWidth) {
+        PairPointIndex result;
+
+        for (auto& line : lines) {
+            auto pointAndIndex = Font::generateTextLine(x, y, line, dictionary);
+            
+            result = Font::mergeVertices(result, pointAndIndex);
+
+            y -= lineWidth;
+        }
+
+        return result;
     }
 
     void loadChar(char c);
