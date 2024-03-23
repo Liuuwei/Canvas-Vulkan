@@ -11,11 +11,8 @@
 #include "PipelineLayout.h"
 #include "Swapchain.h"
 #include "Tools.h"
-#include "glm/ext/vector_uint2.hpp"
 #include "vulkan/vulkan_core.h"
-#include <array>
 #include <cassert>
-#include <chrono>
 #include <cmath>
 #include <format>
 #include <cstddef>
@@ -23,8 +20,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <filesystem>
-#include <format>
 #include <memory>
 #include <stdexcept>
 #include <iostream>
@@ -41,7 +36,6 @@
 
 #include "ShaderModule.h"
 #include "Plane.h"
-#include "Line.h"
 
 Vulkan::Vulkan(const std::string& title, uint32_t width, uint32_t height) : width_(width), height_(height), title_(title) {
     camera_ = std::make_shared<Camera>();
@@ -73,33 +67,6 @@ void Vulkan::initWindow() {
             return ;
         }
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
-
-        if (action == GLFW_PRESS) {
-            switch (key) {
-            case GLFW_KEY_0:
-                vulkan->color_ = Color::Write;
-                break;
-            case GLFW_KEY_1:
-                vulkan->color_ = Color::Red;
-                break;
-            case GLFW_KEY_2:
-                vulkan->color_ = Color::Green;
-                break;
-            case GLFW_KEY_3:
-                vulkan->color_ = Color::Blue;
-                break;
-            case GLFW_KEY_4:
-                vulkan->color_ = Color::Black;
-                break;
-            case GLFW_KEY_UP:
-                vulkan->lineWidth_++;
-                break; 
-            case GLFW_KEY_DOWN:
-                vulkan->lineWidth_--;
-                vulkan->lineWidth_ = std::max(1.0f, vulkan->lineWidth_);
-                break; 
-            }
-        }
 
         if (key == GLFW_KEY_ENTER) {
             if (action == GLFW_PRESS) {
@@ -141,60 +108,12 @@ void Vulkan::initWindow() {
                 }
             }
         }
-
-        auto camera = vulkan->camera_;
-        camera->onKey(window, key, scancode, action, mods);
     });
     glfwSetCursorPosCallback(windows_, [](GLFWwindow* window, double xpos, double ypos) {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
-
-        if (vulkan->LeftButton_) {
-            vulkan->ok_ = true;
-            if (vulkan->LeftButtonOnce_) {
-                vulkan->LeftButtonOnce_ = false;
-                vulkan->prevCursor_.x = xpos;
-                vulkan->prevCursor_.y = ypos;
-                vulkan->currCursor_.x = xpos;
-                vulkan->currCursor_.y = ypos;
-            } else {
-                if (vulkan->prevCursorHandled_) {
-                    vulkan->prevCursor_.x = vulkan->currCursor_.x;
-                    vulkan->prevCursor_.y = vulkan->currCursor_.y;
-                    vulkan->prevCursorHandled_ = false;
-                }
-                vulkan->currCursor_.x = xpos;
-                vulkan->currCursor_.y = ypos;
-            }
-            vulkan->prevCursorRelative_.x = vulkan->prevCursor_.x - vulkan->swapChain_->width() / 2.0f;
-            vulkan->prevCursorRelative_.y = -(vulkan->prevCursor_.y - vulkan->swapChain_->height() / 2.0f);
-            vulkan->currCursorRelative_.x = vulkan->currCursor_.x - vulkan->swapChain_->width() / 2.0f;
-            vulkan->currCursorRelative_.y = -(vulkan->currCursor_.y - vulkan->swapChain_->height() / 2.0f);
-        }
-
-        auto& p = vulkan->prevCursor_;
-        auto& c = vulkan->currCursor_;
-        auto& rp = vulkan->prevCursorRelative_;
-        auto& rc = vulkan->currCursorRelative_;
-
-        auto camera = vulkan->camera_;
-        camera->onMouseMovement(window, xpos, ypos);
     });
     glfwSetMouseButtonCallback(windows_, [](GLFWwindow* window, int button, int action, int mods) {
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
-
-        if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            if (action == GLFW_PRESS) {
-                vulkan->LeftButton_ = true;
-                vulkan->LeftButtonOnce_ = true;
-                vulkan->prevCursorHandled_ = true;
-            } else {
-                vulkan->ok_ = false;
-                vulkan->LeftButton_ = false;
-                vulkan->LeftButtonOnce_ = false;
-                vulkan->prevCursor_.x = -1;
-                vulkan->prevCursor_.y = -1;
-            }
-        }
     });
 }
 
@@ -459,19 +378,10 @@ void Vulkan::createUniformBuffers() {
 }
 
 void Vulkan::createSamplers() {
-    brushSampler_ = std::make_unique<Sampler>(device_);
-    brushSampler_->addressModeU_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    brushSampler_->addressModeV_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    brushSampler_->addressModeW_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    brushSampler_->minLod_ = 0.0f;
-    brushSampler_->maxLod_ = 1.0f;
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
-    brushSampler_->anisotropyEnable_ = VK_TRUE;
-    brushSampler_->maxAnisotropy_ = properties.limits.maxSamplerAnisotropy;
-    brushSampler_->init();
-
     canvasSampler_ = std::make_unique<Sampler>(device_);
+
     canvasSampler_->addressModeU_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     canvasSampler_->addressModeV_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     canvasSampler_->addressModeW_ = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -483,23 +393,8 @@ void Vulkan::createSamplers() {
 }
 
 void Vulkan::createDescriptorPool() {
-    createBrushDescriptorPool();
     createTextDescriptorPool();
     createCanvasDescriptorPool();
-}
-
-void Vulkan::createBrushDescriptorPool() {
-    std::vector<VkDescriptorPoolSize> poolSizes(2);
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = 1;
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = 1;
-
-    brushDescriptorPool_ = std::make_unique<DescriptorPool>(device_);
-    brushDescriptorPool_->poolSizeCount_ = static_cast<uint32_t>(poolSizes.size());
-    brushDescriptorPool_->pPoolSizes_ = poolSizes.data();
-    brushDescriptorPool_->maxSets_ = 1;
-    brushDescriptorPool_->init();
 }
 
 void Vulkan::createTextDescriptorPool() {
@@ -532,30 +427,10 @@ void Vulkan::createCanvasDescriptorPool() {
 }
 
 void Vulkan::createDescriptorSetLayout() {
-    createBrushDescriptorSetLayout();
     createTextDescriptorSetLayout();
     createCanvasDescriptorSetLayout();
 }
 
-void Vulkan::createBrushDescriptorSetLayout() {
-    VkDescriptorSetLayoutBinding uboBinding{}, samplerBinding{};
-    uboBinding.binding = 0;
-    uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboBinding.descriptorCount = 1;
-    uboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    samplerBinding.binding = 1;
-    samplerBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    samplerBinding.descriptorCount = 1;
-    samplerBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    std::vector<VkDescriptorSetLayoutBinding> bindings = {uboBinding, samplerBinding};
-
-    brushDescriptorSetLayout_ = std::make_unique<DescriptorSetLayout>(device_);
-    brushDescriptorSetLayout_->bindingCount_ = static_cast<uint32_t>(bindings.size());
-    brushDescriptorSetLayout_->pBindings_ = bindings.data();
-    brushDescriptorSetLayout_->init();
-}
 
 void Vulkan::createTextDescriptorSetLayout() {
     VkDescriptorSetLayoutBinding uboBinding{}, samplerBinding{};
@@ -598,50 +473,8 @@ void Vulkan::createCanvasDescriptorSetLayout() {
 }
 
 void Vulkan::createDescriptorSet() {
-    createBrushDescriptorSet();
     createTextDescriptorSet();
     createCanvasDescriptorSet();
-}
-
-void Vulkan::createBrushDescriptorSet() {
-    std::vector<VkDescriptorSetLayout> descriptorSetLayouts(1, brushDescriptorSetLayout_->descriptorSetLayout());
-
-    VkDescriptorSetAllocateInfo allocateInfo{};
-    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocateInfo.descriptorPool = brushDescriptorPool_->descriptorPool();
-    allocateInfo.descriptorSetCount = static_cast<uint32_t>(descriptorSetLayouts.size());
-    allocateInfo.pSetLayouts = descriptorSetLayouts.data();
-
-    if (vkAllocateDescriptorSets(device_, &allocateInfo, &brushDescriptorSets_) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate descriptor sets!");
-    }
-
-    VkDescriptorBufferInfo bufferInfo{};
-    bufferInfo.buffer = uniformBuffers_->buffer();
-    bufferInfo.offset = 0;
-    bufferInfo.range = sizeof(UniformBufferObject);
-
-    VkDescriptorImageInfo samplerInfo{};
-    samplerInfo.imageView = canvasImage_->view();
-    samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    samplerInfo.sampler = brushSampler_->sampler();
-
-    std::vector<VkWriteDescriptorSet> descriptorWrites(2);
-    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[0].dstSet = brushDescriptorSets_;
-    descriptorWrites[0].dstBinding = 0;
-    descriptorWrites[0].descriptorCount = 1;
-    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[1].dstSet = brushDescriptorSets_;
-    descriptorWrites[1].dstBinding = 1;
-    descriptorWrites[1].descriptorCount = 1;
-    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorWrites[1].pImageInfo = &samplerInfo;
-
-    vkUpdateDescriptorSets(device_, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 }
 
 void Vulkan::createTextDescriptorSet() {
@@ -738,128 +571,7 @@ void Vulkan::createVertex() {
     canvasVertices_ = t.first;
     canvasIndices_ = t.second;
 
-    line_ = std::make_unique<Line>();
-
-    {
-        auto t = line_->initVertices(swapChain_->width(), swapChain_->height());
-        lineVertices_ = t.first;
-        lineIndices_ = t.second;
-
-        lineVertexMaps_.resize(lineVertices_.size());
-        for (size_t i = 0; i < lineVertices_.size(); i++) {
-            int x = lineVertices_[i].position_.x, y = lineVertices_[i].position_.y;
-            x += swapChain_->width() / 2;
-            y += swapChain_->height() / 2;
-            lineVertexMaps_[y * swapChain_->width() + x] = i;
-        }
-    }
-
-    {
-        font_ = std::make_unique<Font>(fontPath_.c_str(), 48);
-    }
-}
-
-void Vulkan::createBrushPipeline() {
-    auto vertBrush = ShaderModule(device_, "../shaders/spv/VertBrush.spv"); 
-    auto fragBrush = ShaderModule(device_, "../shaders/spv/FragBrush.spv");
-
-    VkPipelineShaderStageCreateInfo vertexStageInfo{}, fragmentStageInfo{};
-    vertexStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertexStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertexStageInfo.module = vertBrush.shader();
-    vertexStageInfo.pName = "main";
-
-    fragmentStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragmentStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragmentStageInfo.module = fragBrush.shader();
-    fragmentStageInfo.pName = "main";
-
-    std::vector<VkPipelineShaderStageCreateInfo> shaderStages{vertexStageInfo, fragmentStageInfo};
-    
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    auto bindingDescription = line_->bindingDescription(0);
-    auto attributeDescription = line_->attributeDescription(0);
-
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescription.size());
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescription.data();
-
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
-    inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssemblyInfo.topology = line_->topology();
-
-    VkPipelineViewportStateCreateInfo viewportInfo{};
-    viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportInfo.viewportCount = 1;
-    viewportInfo.scissorCount = 1;
-
-    VkPipelineRasterizationStateCreateInfo rasterizaInfo{};
-    rasterizaInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizaInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizaInfo.cullMode = VK_CULL_MODE_NONE;
-    rasterizaInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rasterizaInfo.lineWidth = 1.0f;
-
-    VkPipelineMultisampleStateCreateInfo multipleInfo{};
-    multipleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multipleInfo.rasterizationSamples = msaaSamples_;
-    multipleInfo.minSampleShading = 1.0f;
-    
-    VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
-    depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencilInfo.depthTestEnable = VK_TRUE;
-    depthStencilInfo.depthWriteEnable = VK_TRUE;
-    depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-    depthStencilInfo.minDepthBounds = 0.0f;
-    depthStencilInfo.maxDepthBounds = 1.0f;
-
-    VkPipelineColorBlendAttachmentState colorBlendAttachmentInfo{};
-    colorBlendAttachmentInfo.blendEnable = VK_FALSE;
-    colorBlendAttachmentInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachmentInfo.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-    colorBlendAttachmentInfo.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    colorBlendAttachmentInfo.colorBlendOp = VK_BLEND_OP_ADD;
-    colorBlendAttachmentInfo.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    colorBlendAttachmentInfo.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    colorBlendAttachmentInfo.alphaBlendOp = VK_BLEND_OP_ADD;
-    
-    VkPipelineColorBlendStateCreateInfo colorBlendInfo{};
-    colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlendInfo.attachmentCount = 1;
-    colorBlendInfo.pAttachments = &colorBlendAttachmentInfo;
-
-    std::vector<VkDynamicState> dynamics{
-        VK_DYNAMIC_STATE_VIEWPORT, 
-        VK_DYNAMIC_STATE_SCISSOR, 
-    };
-    VkPipelineDynamicStateCreateInfo dynamicInfo{};
-    dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicInfo.dynamicStateCount = static_cast<uint32_t>(dynamics.size());
-    dynamicInfo.pDynamicStates = dynamics.data();
-
-    std::vector<VkDescriptorSetLayout> descriptorSetLayouts = {brushDescriptorSetLayout_->descriptorSetLayout()};
-    brushPipelineLayout_ = std::make_unique<PipelineLayout>(device_);
-    brushPipelineLayout_->setLayoutCount_ = static_cast<uint32_t>(descriptorSetLayouts.size());
-    brushPipelineLayout_->pSetLayouts_ = descriptorSetLayouts.data();
-    brushPipelineLayout_->init();
-
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    brushPipeline_ = std::make_unique<Pipeline>(device_);
-    brushPipeline_->stageCount_ = shaderStages.size();
-    brushPipeline_->pStages_ = shaderStages.data();
-    brushPipeline_->pVertexInputState_ = &vertexInputInfo;
-    brushPipeline_->pInputAssemblyState_ = &inputAssemblyInfo;
-    brushPipeline_->pViewportState_ = &viewportInfo;
-    brushPipeline_->pRasterizationState_ = &rasterizaInfo;;
-    brushPipeline_->pMultisampleState_ = &multipleInfo;
-    brushPipeline_->pDepthStencilState_ = &depthStencilInfo;
-    brushPipeline_->pColorBlendState_ = &colorBlendInfo;
-    brushPipeline_->pDynamicState_ = &dynamicInfo;
-    brushPipeline_->layout_ = brushPipelineLayout_->pipelineLayout();
-    brushPipeline_->renderPass_ = renderPass_->renderPass();
-    brushPipeline_->init();
+    font_ = std::make_unique<Font>(fontPath_.c_str(), 48);
 }
 
 void Vulkan::createTextPipeline() {
@@ -1070,7 +782,6 @@ void Vulkan::createCanvasPipeline() {
 
 void Vulkan::createGraphicsPipelines() {
     createCanvasPipeline();
-    createBrushPipeline();
     createTextPipeline();
 }
 
@@ -1178,37 +889,6 @@ void Vulkan::createVertexBuffer() {
 
         copyBuffer(staginBuffer->buffer(), canvasVertexBuffer_->buffer(), size);
     }
-
-    {
-        VkDeviceSize size = sizeof(Line::Point) * lineVertices_.size();
-
-        lineVertexBuffers_ = std::make_unique<Buffer>(physicalDevice_, device_);
-        if (size == 0) {
-            return ;
-        }
-        lineVertexBuffers_->size_ = size;
-        lineVertexBuffers_->usage_ = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        lineVertexBuffers_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-        lineVertexBuffers_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-        lineVertexBuffers_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-        lineVertexBuffers_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        lineVertexBuffers_->init();
-
-        auto staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
-        staginBuffer->size_ = size;
-        staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-        staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-        staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-        staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        staginBuffer->init();
-
-        auto data = staginBuffer->map(size);
-        memcpy(data, lineVertices_.data(), size);
-        staginBuffer->unMap();
-
-        copyBuffer(staginBuffer->buffer(), lineVertexBuffers_->buffer(), size);
-    }
 }
 
 void Vulkan::createIndexBuffer() {
@@ -1238,37 +918,6 @@ void Vulkan::createIndexBuffer() {
         staginBuffer->unMap();
 
         copyBuffer(staginBuffer->buffer(), canvasIndexBuffer_->buffer(), size);
-    }
-    
-    {
-        VkDeviceSize size = sizeof(lineIndices_[0]) * lineIndices_.size();
-
-        lineIndexBuffers_ = std::make_unique<Buffer>(physicalDevice_, device_);
-        if (size == 0) {
-            return ;
-        }
-        lineIndexBuffers_->size_ = size;
-        lineIndexBuffers_->usage_ = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-        lineIndexBuffers_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-        lineIndexBuffers_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-        lineIndexBuffers_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-        lineIndexBuffers_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        lineIndexBuffers_->init();
-
-        std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
-        staginBuffer->size_ = size;
-        staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-        staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-        staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
-        staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-        staginBuffer->init();
-
-        auto data = staginBuffer->map(size);
-        memcpy(data, lineIndices_.data(), size);
-        staginBuffer->unMap();
-
-        copyBuffer(staginBuffer->buffer(), lineIndexBuffers_->buffer(), size);
     }
 }
 
@@ -1323,20 +972,6 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
         VkDeviceSize offsets[] = {0};
-
-        // Lines
-        if (lineVertices_.size() != 0) {
-            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, brushPipeline_->pipeline());
-
-            std::vector<VkDescriptorSet> descriptorSets{brushDescriptorSets_};
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, brushPipelineLayout_->pipelineLayout(), 0, static_cast<uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
-
-            std::vector<VkBuffer> vertexBuffer = {lineVertexBuffers_->buffer()};
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffer.data(), offsets);
-            vkCmdBindIndexBuffer(commandBuffer, lineIndexBuffers_->buffer(), 0, VK_INDEX_TYPE_UINT32);
-            
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(lineIndices_.size()), 1, 0, 0, 0);
-        }
 
         // chars
         if (text_.size()) {
@@ -1572,36 +1207,6 @@ void Vulkan::updateDrawAssets() {
     auto data = uniformBuffers_->map(sizeof(ubo));    
     memcpy(data, &ubo, sizeof(ubo));
     
-    {   
-        if (ok_ == true && LeftButton_ == true) {
-            ok_ = false;
-            auto& vertices = lineVertices_;
-            auto& indices = lineIndices_;
-            auto& vertexBuffer = lineVertexBuffers_;
-            auto& indexBuffer = lineIndexBuffers_;
-
-            changePoint();
-            prevCursorHandled_ = true;
-
-            VkDeviceSize size = sizeof(Line::Point) * lineVertices_.size();
-
-            Buffer staginBuffer(physicalDevice_, device_);
-            staginBuffer.size_ = size;
-            staginBuffer.usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-            staginBuffer.sharingMode_ = VK_SHARING_MODE_EXCLUSIVE;
-            staginBuffer.queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-            staginBuffer.pQueueFamilyIndices_ = queueFamilies_.sets().data();
-            staginBuffer.memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            staginBuffer.init();
-
-            auto data = staginBuffer.map(size);
-            memcpy(data, lineVertices_.data(), size);
-            staginBuffer.unMap();
-
-            copyBuffer(staginBuffer.buffer(), lineVertexBuffers_->buffer(), size);
-        }
-    }
-
     {   
         if (inputText_ && text_.size()) {
             auto t = font_->generateText(-static_cast<float>(swapChain_->width()) / 2.0f, -static_cast<float>(swapChain_->height()) / 2.0f, text_, dictionary_);
@@ -1854,108 +1459,6 @@ void Vulkan::endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue)
     vkQueueWaitIdle(queue);
 
     vkFreeCommandBuffers(device_, commandPool_->commanddPool(), 1, &commandBuffer);
-}
-
-void Vulkan::fillColor(uint32_t index) {
-    switch (color_) {
-    case Color::Write:
-        lineVertices_[index].color_ = glm::vec4(write3_, 0.0f);
-        break;
-    case Color::Red:
-        lineVertices_[index].color_ = glm::vec4(red3_, 1.0f);
-        break;
-    case Color::Green:
-        lineVertices_[index].color_ = glm::vec4(green3_, 1.0f);
-        break;
-    case Color::Blue:
-        lineVertices_[index].color_ = glm::vec4(blue3_, 1.0f);
-        break;
-    case Color::Black:
-        lineVertices_[index].color_ = glm::vec4(black3_, 1.0f);
-        break;
-    }
-}
-
-void Vulkan::changePoint() {
-    auto deltaX = prevCursorRelative_.x - currCursorRelative_.x;
-    auto deltaY = prevCursorRelative_.y - currCursorRelative_.y;
-
-    auto a = deltaY / deltaX;
-    auto b = prevCursorRelative_.y - a * prevCursorRelative_.x;
-
-    int bx = std::min(prevCursorRelative_.x, currCursorRelative_.x);
-    int by = std::min(prevCursorRelative_.y, currCursorRelative_.y);
-    int ex = std::max(prevCursorRelative_.x, currCursorRelative_.x);
-    int ey = std::max(prevCursorRelative_.y, currCursorRelative_.y);
-
-    bx -= lineWidth_ / 2.0f;
-    ex += lineWidth_ / 2.0f;
-    by -= lineWidth_ / 2.0f;
-    ey += lineWidth_ / 2.0f;
-
-#ifdef DEBUG_CHANGE_POINT
-    std::cout << "------change point------" << std::endl;
-    std::cout << "delx: " << deltaX << std::endl;
-    std::cout << "dely: " << deltaY << std::endl;
-    std::cout << "a   : " << a << std::endl;
-    std::cout << "b   : " << b << std::endl;
-    std::cout << "b   : " << bx << ',' << by << std::endl;
-    std::cout << "e   : " << ex << ',' << ey << std::endl;
-    std::cout << "prev: " << prevCursorRelative_.x << ',' << prevCursorRelative_.y << std::endl;
-    std::cout << "curr: " << currCursorRelative_.x << ',' << currCursorRelative_.y << std::endl;
-#endif
-
-
-    int t = 0;
-    int acount = 0;
-
-    if (deltaX == 0) {
-        for (int x = bx; x <= ex; x++) {
-            for (int y = by; y <= ey; y++) {
-                acount++;
-                if (!validPoint(x, y)) {
-                    continue;
-                }
-                if (std::abs(x - currCursorRelative_.x) <= lineWidth_) {
-                    t++;
-                    auto index = lineVertexMaps_[(y + swapChain_->height() / 2) * swapChain_->width() + (x + swapChain_->width() / 2)];
-                    fillColor(index);
-                }
-            }
-        }
-
-#ifdef DEBUG_CHANGE_POINT
-        std::cout << "aout: " << acount << std::endl;
-        std::cout << "cout: " << t << std::endl;
-#endif
-
-        return ;
-    }
-
-    for (int x = bx; x <= ex; x++) {
-        for (int y = by; y <= ey; y++) {
-            acount++;
-            if (!validPoint(x, y)) {
-                continue;
-            }
-            if (Tools::pointToLineLength(a, b, x, y) <= lineWidth_) {
-                t++;
-                auto index = lineVertexMaps_[(y + swapChain_->height() / 2) * swapChain_->width() + (x + swapChain_->width() / 2)];
-                fillColor(index);
-            }
-        }
-    }
-#ifdef DEBUG_CHANGE_POINT
-        std::cout << "aout: " << acount << std::endl;
-        std::cout << "cout: " << t << std::endl;
-#endif
-}
-
-bool Vulkan::validPoint(int x, int y) {
-    auto width = static_cast<int32_t>(swapChain_->width()), height = static_cast<int32_t>(swapChain_->height());
-    auto res =  (x <= width / 2) && (x >= -width / 2) && (y <= height / 2) && (y >= -height / 2);
-
-    return res;
 }
 
 void Vulkan::processText() {

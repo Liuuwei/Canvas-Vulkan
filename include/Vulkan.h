@@ -8,8 +8,6 @@
 #include "Sampler.h"
 #include "Semaphore.h"
 #include "Swapchain.h"
-#include "Vertex.h"
-#include "ktx.h"
 #include "vulkan/vulkan_core.h"
 #include <cstddef>
 #include <cstdint>
@@ -36,7 +34,6 @@
 #include "Sampler.h"
 #include "Camera.h"
 #include "Timer.h"
-#include "Line.h"
 #include "Font.h"
 
 class Vulkan {
@@ -92,24 +89,17 @@ private:
     void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkQueue queue);
     void fillColor(uint32_t index);
 
-    void createBrushPipeline();
     void createCanvasPipeline();
     void createTextPipeline();
 
-    void createBrushDescriptorPool();
     void createTextDescriptorPool();
     void createCanvasDescriptorPool();
 
-    void createBrushDescriptorSetLayout();
     void createTextDescriptorSetLayout();
     void createCanvasDescriptorSetLayout();
 
-    void createBrushDescriptorSet();
     void createTextDescriptorSet();
     void createCanvasDescriptorSet();
-
-    void changePoint();
-    bool validPoint(int x, int y);
 
     void processText();
     void updateTexture();
@@ -133,19 +123,11 @@ private:
 
     std::unique_ptr<SwapChain> swapChain_;
 
-    std::unique_ptr<Sampler> brushSampler_;
     std::unique_ptr<Sampler> canvasSampler_;
-
-    std::unique_ptr<DescriptorPool> brushDescriptorPool_;
-    std::unique_ptr<DescriptorSetLayout> brushDescriptorSetLayout_;
-    VkDescriptorSet brushDescriptorSets_;
 
     std::unique_ptr<DescriptorPool> canvasDescriptorPool_;
     std::unique_ptr<DescriptorSetLayout> canvasDescriptorSetLayout_;
     VkDescriptorSet canvasDescriptorSets_ = VK_NULL_HANDLE;
-
-    std::unique_ptr<PipelineLayout> brushPipelineLayout_;
-    std::unique_ptr<Pipeline> brushPipeline_;
 
     std::unique_ptr<PipelineLayout> canvasPipelineLayout_;
     std::unique_ptr<Pipeline> canvasPipeline_;
@@ -162,10 +144,6 @@ private:
     std::unique_ptr<Fence> inFlightFences_;
     std::unique_ptr<Semaphore> imageAvaiableSemaphores_;
     std::unique_ptr<Semaphore> renderFinishSemaphores_;
-
-    std::string skyBoxPath_ = "../textures/skybox.ktx";
-    ktxTexture* skyBoxTexture_;
-    std::unique_ptr<Image> skyBoxImage_;
 
     std::string canvasTexturePath_ = "../textures/canvas-texture1.jpg";
     std::string updateCanvasTexturePath_;
@@ -211,26 +189,6 @@ private:
     std::unique_ptr<Buffer> canvasVertexBuffer_;
     std::unique_ptr<Buffer> canvasIndexBuffer_;
     std::unique_ptr<Buffer> canvasUniformBuffer_;
-
-    std::unique_ptr<Line> line_;
-    std::vector<Line::Point> lineVertices_;
-    std::vector<uint32_t> lineIndices_;
-    std::unique_ptr<Buffer> lineVertexBuffers_;
-    std::unique_ptr<Buffer> lineIndexBuffers_;
-    std::vector<uint32_t> lineVertexMaps_;
-    float lineWidth_ = 1.0f;
-    bool LeftButton_ = false;
-    bool LeftButtonOnce_ = false;
-    bool LeftButtonOnceIn_ = false;
-    bool prevCursorHandled_ = false;
-
-    glm::vec2 prevCursor_{};
-    glm::vec2 currCursor_{};
-    glm::vec2 prevCursorRelative_{};
-    glm::vec2 currCursorRelative_{};
-    bool ok_ = false;
-    
-    int times_ = 0;
 
     std::unique_ptr<Font> font_;
     const std::string fontPath_ = "../fonts/jbMono.ttf";
