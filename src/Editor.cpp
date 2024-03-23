@@ -1,11 +1,9 @@
 #include "Editor.h"
-#include "Vulkan.h"
 #include "glm/fwd.hpp"
-#include "vk_video/vulkan_video_codec_h264std_encode.h"
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <iostream>
 
 Editor::Editor(uint32_t width, uint32_t height, uint32_t lineHeight) : screen_(width, height), lineHeight_(lineHeight), showLines_(height / lineHeight) {
     lines_.resize(1);
@@ -66,6 +64,12 @@ void Editor::insertChar(char c) {
     moveLimit();
 }
 
+void Editor::insertStr(const std::string& str) {
+    for (size_t i = 0; i < str.size(); i++) {
+        insertChar(str[i]);
+    }
+}
+
 void Editor::delteChar() {
     auto& currLine = lines_[cursorPos_.y];
 
@@ -85,28 +89,33 @@ void Editor::delteChar() {
 }
 
 void Editor::moveCursor(Editor::Direction dir) {
-    if (dir == Up) {
+    switch (dir) {
+    case Up:
         if (cursorPos_.y == 0) {
             return ;
         }
         cursorPos_.y--;
-        cursorPos_.x = std::min(cursorPos_.x, static_cast<uint32_t>(lines_[cursorPos_.y].size()));
-    } else if (dir == Down) {
+        cursorPos_.x = std::min(cursorPos_.x, static_cast<uint32_t>(lines_[cursorPos_.y].size() - lineNumberOffset_));
+        break;
+    case Down:
         if (cursorPos_.y >= lines_.size() - 1) {
             return ;
         }
         cursorPos_.y++;
-        cursorPos_.x = std::min(cursorPos_.x, static_cast<uint32_t>(lines_[cursorPos_.y].size()));
-    } else if (dir == Right) {
-        if (cursorPos_.x >= lines_[cursorPos_.x].size()) {
+        cursorPos_.x = std::min(cursorPos_.x, static_cast<uint32_t>(lines_[cursorPos_.y].size() - lineNumberOffset_));
+        break;
+    case Right:
+        if (cursorPos_.x + lineNumberOffset_ >= lines_[cursorPos_.y].size()) {
             return ;
         }
         cursorPos_.x++;
-    } else if (dir == Left) {
+        break;
+    case Left:
         if (cursorPos_.x <= 0) {
             return ;
         }
         cursorPos_.x--;
+        break;
     }
 
     moveLimit();
