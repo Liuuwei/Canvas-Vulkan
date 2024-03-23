@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -80,45 +81,71 @@ public:
         
         auto index = character.index_;
 
-        auto t = Plane::vertices(x, y, width, height, color);
-        std::vector<Point> points;
-        for (size_t i = 0; i < t.first.size(); i++) {
-            points.emplace_back(Point(t.first[i], index));
-        }
+        auto w2 = width / 2.0f, h2 = height / 2.0f;
 
-        return {points, t.second};
+        std::vector<Font::Point> vertices = {
+            {x - w2, y + h2, color.x, color.y, color.z, 0.0f, 1.0f, index}, 
+            {x + w2, y + h2, color.x, color.y, color.z,  1.0f, 1.0f, index}, 
+            {x - w2, y - h2, color.x, color.y, color.z, 0.0f, 0.0f, index}, 
+            {x + w2, y - h2, color.x, color.y, color.z, 1.0f, 0.0f, index}, 
+        };
+
+        std::vector<uint32_t> indices = {
+            0, 1, 2, 2, 1, 3
+        };
+
+        return {vertices, indices};
     }
 
     typedef std::pair<std::vector<Point>, std::vector<uint32_t>> PairPointIndex;
     static PairPointIndex mergeVertices(PairPointIndex p1, PairPointIndex p2) {
         auto size = p1.first.size();
 
-        for (size_t i = 0; i < p2.first.size(); i++) {
-            p1.first.push_back(p2.first[i]);
-        }
-        for (size_t i = 0; i < p2.second.size(); i++) {
-            p1.second.push_back(p2.second[i] + size);
-        }
+        std::for_each(p2.second.begin(), p2.second.end(), [size](auto& v) {
+            v += size;
+        });
+
+        p1.first.insert(p1.first.end(), p2.first.begin(), p2.first.end());
+        p1.second.insert(p1.second.end(), p2.second.begin(), p2.second.end());
 
         return p1;
     }
 
     static PairPointIndex generateTextLine(float x, float y, const std::string& line, const std::unordered_map<char, Character>& dictionary) {
+        auto s = Timer::nowMilliseconds();
         PairPointIndex result;
-        for (auto& c : line) {
+        unsigned long long v = 0, m = 0;
+        for (size_t i = 0; i < line.size(); i++) {
             glm::vec2 center;
-            center.x = x + dictionary.at(c).offsetX_ + dictionary.at(c).width_ / 2.0f;
-            center.y = y + dictionary.at(c).offsetY_ - dictionary.at(c).height_ / 2.0f;
-            auto t = Font::vertices(center.x, center.y, dictionary.at(c), dictionary.at(c).color_);
+            center.x = x + dictionary.at(line[i]).offsetX_ + dictionary.at(line[i]).width_ / 2.0f;
+            center.y = y + dictionary.at(line[i]).offsetY_ - dictionary.at(line[i]).height_ / 2.0f;
+            auto s = Timer::nowMilliseconds();
+            auto t = Font::vertices(center.x, center.y, dictionary.at(line[i]), dictionary.at(line[i]).color_);
+            auto e = Timer::nowMilliseconds();
+            v += e - s;
             
             for (auto& point : t.first) {
                 point.texCoord_.y = 1.0f - point.texCoord_.y;
             }
 
-            result = Font::mergeVertices(result, t);
+            s = Timer::nowMilliseconds();
+            // result = Font::mergeVertices(result, t);
+            {
+                auto size = result.first.size();
 
-            x += dictionary.at(c).advance_;
+                std::for_each(t.second.begin(), t.second.end(), [size](auto& v) {
+                    v += size;
+                });
+
+                result.first.insert(result.first.end(), t.first.begin(), t.first.end());
+                result.second.insert(result.second.end(), t.second.begin(), t.second.end());
+            }
+            e = Timer::nowMilliseconds();
+            m += e - s;
+
+            x += dictionary.at(line[i]).advance_;
         }
+        std::cout << std::format("[once] vertices ms: {}, merge ms: {}\n", v, m);
 
         return result;
     }
@@ -126,13 +153,22 @@ public:
     static PairPointIndex generateTextLines(float x, float y, const std::vector<std::string>& lines, const std::unordered_map<char, Character>& dictionary, uint32_t lineWidth) {
         PairPointIndex result;
 
+        unsigned long long g = 0, m = 0;
         for (auto& line : lines) {
+            auto s = Timer::nowMilliseconds();
             auto pointAndIndex = Font::generateTextLine(x, y, line, dictionary);
+            auto e = Timer::nowMilliseconds();
+            g += e - s;
             
+
             result = Font::mergeVertices(result, pointAndIndex);
+            s = Timer::nowMilliseconds();
+            m += s - e;
 
             y -= lineWidth;
         }
+
+        std::cout << std::format("generate ms: {}, merge ms: {}\n", g, m);
 
         return result;
     }
