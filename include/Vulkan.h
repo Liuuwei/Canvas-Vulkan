@@ -35,6 +35,7 @@
 #include "Camera.h"
 #include "Timer.h"
 #include "Font.h"
+#include "Editor.h"
 
 class Vulkan {
 public:
@@ -72,6 +73,7 @@ private:
     void loadAssets();
     void updateDrawAssets();
     void recreateSwapChain();
+    void createEditor();
 
 private:
     bool checkValidationLayerSupport() ;
@@ -103,6 +105,10 @@ private:
 
     void processText();
     void updateTexture();
+
+    void input(int key, int scancode, int mods);
+    void inputText(int key, int scancode, int mods);
+    void inputCommand(int key, int scandcode, int mods);
     
     GLFWwindow* windows_;
     uint32_t width_;
@@ -202,6 +208,8 @@ private:
     std::vector<uint32_t> fontIndices_;
     std::unique_ptr<Buffer> fontVertexBuffer_;
     std::unique_ptr<Buffer> fontIndexBuffer_;
+
+    std::unique_ptr<Editor> editor_;
 
     int inputText_ = 0;
     int capsLock_ = 0;

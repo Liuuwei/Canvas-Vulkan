@@ -4,6 +4,7 @@
 #include "CommandPool.h"
 #include "DescriptorPool.h"
 #include "DescriptorSetLayout.h"
+#include "Editor.h"
 #include "FrameBuffer.h"
 #include "GLFW/glfw3.h"
 #include "Image.h"
@@ -20,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <memory>
 #include <stdexcept>
 #include <iostream>
@@ -68,45 +70,8 @@ void Vulkan::initWindow() {
         }
         auto vulkan = reinterpret_cast<Vulkan*>(glfwGetWindowUserPointer(window));
 
-        if (key == GLFW_KEY_ENTER) {
-            if (action == GLFW_PRESS) {
-                vulkan->inputText_ ^= 1;
-                if (!vulkan->inputText_) {
-                    if (vulkan->text_.size()) {
-                        vulkan->processText();
-                    }
-                    vulkan->text_.clear();
-                } else {
-                    vulkan->text_.push_back(':');
-                }
-            }
-
-            return ;
-        }
-
-        if (vulkan->inputText_) {
-            if (action == GLFW_PRESS) {
-                char c;
-                if (key == GLFW_KEY_BACKSPACE) {
-                    if (vulkan->text_.size() > 1) {
-                        vulkan->text_.pop_back();
-                    }
-                } else if (key == GLFW_KEY_CAPS_LOCK) {
-                        vulkan->capsLock_ ^= 1;
-                } else if (key >= 0 && key <= 127) {
-                    if (mods == GLFW_MOD_SHIFT) {
-                        c = Tools::charToShiftChar(Tools::keyToChar(key));
-                    } else {
-                        if (!vulkan->capsLock_ && key >= 'A' && key <= 'Z') {
-                            key += 32; 
-                        }
-                        c = Tools::keyToChar(key);
-                    }
-                    if (key != 340) {
-                        vulkan->text_.push_back(c);
-                    }
-                }
-            }
+        if (action == GLFW_PRESS) {
+            vulkan->input(key, scancode, mods);
         }
     });
     glfwSetCursorPosCallback(windows_, [](GLFWwindow* window, double xpos, double ypos) {
@@ -134,6 +99,7 @@ void Vulkan::initVulkan() {
     createDescriptorSetLayout();
     createDescriptorSet();
     createVertex();
+    createEditor();
     createGraphicsPipelines();
     createColorResource();
     createDepthResource();
@@ -574,6 +540,17 @@ void Vulkan::createVertex() {
     font_ = std::make_unique<Font>(fontPath_.c_str(), 48);
 }
 
+void Vulkan::createEditor() {
+    editor_ = std::make_unique<Editor>(swapChain_->width(), swapChain_->height(), 33);
+    
+    // for (int i = 0; i < 1000; i ++) {
+    //     for (int j = 0; j < 150; j++) {
+    //         editor_->insertChar('a');
+    //     }
+    //     editor_->enter();
+    // }
+}
+
 void Vulkan::createTextPipeline() {
     auto vertFont = ShaderModule(device_, "../shaders/spv/VertFont.spv"); 
     auto fragFont = ShaderModule(device_, "../shaders/spv/FragFont.spv");
@@ -974,7 +951,7 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
         VkDeviceSize offsets[] = {0};
 
         // chars
-        if (text_.size()) {
+        if (editor_->wordCount_ > 0) {
             vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, fontPipeline_->pipeline());
 
             std::vector<VkDescriptorSet> descriptorSets{fontDescriptorSet_};
@@ -1208,8 +1185,9 @@ void Vulkan::updateDrawAssets() {
     memcpy(data, &ubo, sizeof(ubo));
     
     {   
-        if (inputText_ && text_.size()) {
-            auto t = font_->generateText(-static_cast<float>(swapChain_->width()) / 2.0f, -static_cast<float>(swapChain_->height()) / 2.0f, text_, dictionary_);
+        if (editor_->wordCount_ > 0) {
+            auto text = std::vector<std::string>(editor_->lines_.begin() + editor_->limit_.up_, editor_->lines_.begin() + editor_->limit_.bottom_);
+            auto t = font_->generateTextLines(-static_cast<float>(swapChain_->width()) / 2.0f, static_cast<float>(swapChain_->height()) / 2.0f - editor_->lineHeight_, text, dictionary_, editor_->lineHeight_);
             fontVertices_ = t.first;
             fontIndices_ = t.second;
             
@@ -1290,6 +1268,7 @@ void Vulkan::recreateSwapChain() {
     createFrameBuffer();   
 
     createVertex();
+    editor_->adjust(swapChain_->width(), swapChain_->height());
     createVertexBuffer();
     createIndexBuffer();
 
@@ -1527,6 +1506,50 @@ void Vulkan::updateTexture() {
     endSingleTimeCommands(cmdBuffer, transferQueue_);
 
     createCanvasDescriptorSet();
+}
+
+void Vulkan::input(int key, int scancode, int mods) {
+    if (key == 256) {
+        editor_->mode_ = Editor::Mode::Command;
+        return ;
+    }
+    if (editor_->mode_ == Editor::Mode::Command && key == 'I') {
+        editor_->mode_ = Editor::Mode::Input;
+        return ;
+    }
+
+    if (editor_->mode_ == Editor::Mode::Command) {
+        inputCommand(key, scancode, mods);
+    } else {
+        inputText(key, scancode, mods);
+    }
+}
+
+void Vulkan::inputText(int key, int scancode, int mods) {
+    char c;
+    if (key == GLFW_KEY_BACKSPACE) {
+        editor_->backspace();
+    } else if (key == GLFW_KEY_CAPS_LOCK) {
+        capsLock_ ^= 1;
+    } else if (key == GLFW_KEY_ENTER) {
+        editor_->enter();
+    } else if (key >= 0 && key <= 127) {
+        if (mods == GLFW_MOD_SHIFT) {
+            c = Tools::charToShiftChar(Tools::keyToChar(key));
+        } else {
+            if (!capsLock_ && key >= 'A' && key <= 'Z') {
+                key += 32; 
+            }
+            c = Tools::keyToChar(key);
+        }
+        if (key != 340) {
+            editor_->insertChar(c);
+        }
+    }
+}
+
+void Vulkan::inputCommand(int key, int scancode, int mods) {
+
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL Vulkan::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 
