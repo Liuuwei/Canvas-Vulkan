@@ -123,9 +123,8 @@ void Vulkan::initWindow() {
                 } else if (key == GLFW_KEY_CAPS_LOCK) {
                     vulkan->capsLock_ ^= 1;
                 } else {
-                    std::cout << key << std::endl;
                     auto c = Tools::keyToChar(key);
-                    if (!vulkan->capsLock_) {
+                    if (c >= 'A' && c <= 'Z' && !vulkan->capsLock_) {
                         c += 32;
                     }
                     vulkan->text_.push_back(c);
@@ -498,13 +497,13 @@ void Vulkan::createTextDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = 1;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = 1;
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(dictionary_.size());
 
-    canvasDescriptorPool_ = std::make_unique<DescriptorPool>(device_);
-    canvasDescriptorPool_->poolSizeCount_ = static_cast<uint32_t>(poolSizes.size());
-    canvasDescriptorPool_->pPoolSizes_ = poolSizes.data();
-    canvasDescriptorPool_->maxSets_ = 1;
-    canvasDescriptorPool_->init();
+    fontDescriptorPool_ = std::make_unique<DescriptorPool>(device_);
+    fontDescriptorPool_->poolSizeCount_ = static_cast<uint32_t>(poolSizes.size());
+    fontDescriptorPool_->pPoolSizes_ = poolSizes.data();
+    fontDescriptorPool_->maxSets_ = 1;
+    fontDescriptorPool_->init();
 }
 
 void Vulkan::createCanvasDescriptorPool() {
@@ -512,13 +511,14 @@ void Vulkan::createCanvasDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = 1;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint64_t>(dictionary_.size());
+    poolSizes[1].descriptorCount = 1;
 
-    fontDescriptorPool_ = std::make_unique<DescriptorPool>(device_);
-    fontDescriptorPool_->poolSizeCount_ = static_cast<uint32_t>(poolSizes.size());
-    fontDescriptorPool_->pPoolSizes_ = poolSizes.data();
-    fontDescriptorPool_->maxSets_ = 1;
-    fontDescriptorPool_->init();
+    canvasDescriptorPool_ = std::make_unique<DescriptorPool>(device_);
+    canvasDescriptorPool_->flags_ = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    canvasDescriptorPool_->poolSizeCount_ = static_cast<uint32_t>(poolSizes.size());
+    canvasDescriptorPool_->pPoolSizes_ = poolSizes.data();
+    canvasDescriptorPool_->maxSets_ = 1;
+    canvasDescriptorPool_->init();
 }
 
 void Vulkan::createDescriptorSetLayout() {
@@ -688,9 +688,10 @@ void Vulkan::createCanvasDescriptorSet() {
     allocateInfo.descriptorSetCount = static_cast<uint32_t>(descriptorSetLayouts.size());
     allocateInfo.pSetLayouts = descriptorSetLayouts.data();
 
-    if (vkAllocateDescriptorSets(device_, &allocateInfo, &canvasDescriptorSets_) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate descriptor sets!");
+    if (canvasDescriptorSets_ != VK_NULL_HANDLE) {
+        VK_CHECK(vkFreeDescriptorSets(device_, canvasDescriptorPool_->descriptorPool(), 1, &canvasDescriptorSets_));
     }
+    VK_CHECK(vkAllocateDescriptorSets(device_, &allocateInfo, &canvasDescriptorSets_));
 
     VkDescriptorBufferInfo bufferInfo{};
     bufferInfo.buffer = uniformBuffers_->buffer();
@@ -1591,7 +1592,7 @@ void Vulkan::updateDrawAssets() {
         }
     }
 
-    {
+    {   
         if (inputText_ && text_.size()) {
             auto t = font_->generateText(-400, -300, text_, dictionary_);
             fontVertices_ = t.first;
@@ -1600,6 +1601,7 @@ void Vulkan::updateDrawAssets() {
             // font vertices
             VkDeviceSize size = sizeof(fontVertices_[0]) * fontVertices_.size();
 
+            fontVertexBuffer_.reset(nullptr);
             fontVertexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
             fontVertexBuffer_->size_ = size;
             fontVertexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -1609,24 +1611,25 @@ void Vulkan::updateDrawAssets() {
             fontVertexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             fontVertexBuffer_->init();
 
-            Buffer staginBuffer(physicalDevice_, device_);
-            staginBuffer.size_ = size;
-            staginBuffer.usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-            staginBuffer.sharingMode_ = VK_SHARING_MODE_EXCLUSIVE;
-            staginBuffer.queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-            staginBuffer.pQueueFamilyIndices_ = queueFamilies_.sets().data();
-            staginBuffer.memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            staginBuffer.init();
+            auto staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+            staginBuffer->size_ = size;
+            staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            staginBuffer->sharingMode_ = VK_SHARING_MODE_EXCLUSIVE;
+            staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+            staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+            staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            staginBuffer->init();
 
-            auto data = staginBuffer.map(size);
+            auto data = staginBuffer->map(size);
             memcpy(data, fontVertices_.data(), size);
-            staginBuffer.unMap();
+            staginBuffer->unMap();
 
-            copyBuffer(staginBuffer.buffer(), fontVertexBuffer_->buffer(), size);
+            copyBuffer(staginBuffer->buffer(), fontVertexBuffer_->buffer(), size);
 
             // font index
             size = sizeof(fontIndices_[0]) * fontIndices_.size();
 
+            fontIndexBuffer_.reset(nullptr);
             fontIndexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
             fontIndexBuffer_->size_ = size;
             fontIndexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
@@ -1636,20 +1639,20 @@ void Vulkan::updateDrawAssets() {
             fontIndexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             fontIndexBuffer_->init();
 
-            staginBuffer = Buffer(physicalDevice_, device_);
-            staginBuffer.size_ = size;
-            staginBuffer.usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-            staginBuffer.sharingMode_ = VK_SHARING_MODE_EXCLUSIVE;
-            staginBuffer.queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
-            staginBuffer.pQueueFamilyIndices_ = queueFamilies_.sets().data();
-            staginBuffer.memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            staginBuffer.init();
+            staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+            staginBuffer->size_ = size;
+            staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            staginBuffer->sharingMode_ = VK_SHARING_MODE_EXCLUSIVE;
+            staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+            staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+            staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            staginBuffer->init();
 
-            data = staginBuffer.map(size);
+            data = staginBuffer->map(size);
             memcpy(data, fontIndices_.data(), size);
-            staginBuffer.unMap();
+            staginBuffer->unMap();
 
-            copyBuffer(staginBuffer.buffer(), fontIndexBuffer_->buffer(), size);
+            copyBuffer(staginBuffer->buffer(), fontIndexBuffer_->buffer(), size);
         }
     }
 }   
@@ -1950,12 +1953,70 @@ bool Vulkan::validPoint(int x, int y) {
 }
 
 void Vulkan::processText() {
-    std::cout << text_ << std::endl;
-    if (text_.size() > 4 && text_.substr(0, 5) == "load:") {
-        auto resource = Tools::rmSpace({text_.begin() + 5, text_.end()});
-        std::cout << resource << std::endl;
-        canvasTexturePath_ = "../textures/" + Tools::rmSpace({text_.begin() + 5, text_.end()});
+    std::cout << std::format("process text: {}", text_) << std::endl;
+    if (text_.size() >= 4 && text_.substr(0, 4) == "load") {
+        auto resource = Tools::rmSpace({text_.begin() + 4, text_.end()});
+        std::cout << std::format("resource: {}", resource) << std::endl;
+        updateCanvasTexturePath_ = "../textures/" + Tools::rmSpace({text_.begin() + 4, text_.end()});
+        updateTexture();
     }
+}
+
+void Vulkan::updateTexture() {
+    int texWidth, texHeight, texChannels;
+    auto pixel = stbi_load(updateCanvasTexturePath_.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    if (!pixel) {
+        return ;
+    }
+
+    VkDeviceSize size = texWidth * texHeight * 4;
+
+    canvasImage_ = std::make_unique<Image>(physicalDevice_, device_);
+    canvasImage_->imageType_ = VK_IMAGE_TYPE_2D;
+    canvasImage_->arrayLayers_ = 1;
+    canvasImage_->mipLevles_ = 1;
+    canvasImage_->format_ = VK_FORMAT_R8G8B8A8_SRGB;
+    canvasImage_->extent_ = {static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 1};
+    canvasImage_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+    canvasImage_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+    canvasImage_->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+    canvasImage_->tiling_ = VK_IMAGE_TILING_OPTIMAL;
+    canvasImage_->usage_ = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    canvasImage_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    canvasImage_->viewType_ = VK_IMAGE_VIEW_TYPE_2D;
+    canvasImage_->samples_ = VK_SAMPLE_COUNT_1_BIT;
+    canvasImage_->subresourcesRange_ = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    canvasImage_->init();
+    
+    std::unique_ptr<Buffer> staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+    staginBuffer->size_ = size;
+    staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+    staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+    staginBuffer->sharingMode_ = queueFamilies_.multiple() ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+    staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    staginBuffer->init();
+    
+    auto data = staginBuffer->map(size);
+    memcpy(data, pixel, size);
+    staginBuffer->unMap();
+
+    VkImageSubresourceRange range{1, 0, 1, 0, 1};
+    VkBufferImageCopy region{};
+    region.imageOffset = {0, 0, 0};
+    region.imageExtent = {static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), 1};
+    region.imageSubresource = {1, 0, 0, 1};
+
+    auto cmdBuffer = beginSingleTimeCommands();
+        Tools::setImageLayout(cmdBuffer, canvasImage_->image(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, range, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        vkCmdCopyBufferToImage(cmdBuffer, staginBuffer->buffer(), canvasImage_->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        Tools::setImageLayout(cmdBuffer, canvasImage_->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, range, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        
+    endSingleTimeCommands(cmdBuffer, transferQueue_);
+
+    createCanvasDescriptorSet();
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL Vulkan::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, 

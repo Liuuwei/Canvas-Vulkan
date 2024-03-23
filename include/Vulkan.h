@@ -112,6 +112,7 @@ private:
     bool validPoint(int x, int y);
 
     void processText();
+    void updateTexture();
     
     GLFWwindow* windows_;
     uint32_t width_;
@@ -141,7 +142,7 @@ private:
 
     std::unique_ptr<DescriptorPool> canvasDescriptorPool_;
     std::unique_ptr<DescriptorSetLayout> canvasDescriptorSetLayout_;
-    VkDescriptorSet canvasDescriptorSets_;
+    VkDescriptorSet canvasDescriptorSets_ = VK_NULL_HANDLE;
 
     std::unique_ptr<PipelineLayout> brushPipelineLayout_;
     std::unique_ptr<Pipeline> brushPipeline_;
@@ -167,7 +168,9 @@ private:
     std::unique_ptr<Image> skyBoxImage_;
 
     std::string canvasTexturePath_ = "../textures/canvas-texture1.jpg";
+    std::string updateCanvasTexturePath_;
     std::unique_ptr<Image> canvasImage_;
+    bool updateCanvas_ = false;
 
     Tools::QueueFamilyIndices queueFamilies_;
     VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
