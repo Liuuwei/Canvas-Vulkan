@@ -97,23 +97,36 @@ public:
         return {vertices, indices};
     }
 
-    typedef std::pair<std::vector<Point>, std::vector<uint32_t>> PairPointIndex;
-    static PairPointIndex mergeVertices(PairPointIndex p1, PairPointIndex p2) {
-        auto size = p1.first.size();
+    // typedef std::pair<std::vector<Point>, std::vector<uint32_t>> PairPointIndex;
+    // static PairPointIndex merge(PairPointIndex p1, PairPointIndex p2) {
+    //     auto size = p1.first.size();
 
-        std::for_each(p2.second.begin(), p2.second.end(), [size](auto& v) {
-            v += size;
-        });
+    //     std::for_each(p2.second.begin(), p2.second.end(), [size](auto& v) {
+    //         v += size;
+    //     });
 
-        p1.first.insert(p1.first.end(), p2.first.begin(), p2.first.end());
-        p1.second.insert(p1.second.end(), p2.second.begin(), p2.second.end());
+    //     p1.first.insert(p1.first.end(), p2.first.begin(), p2.first.end());
+    //     p1.second.insert(p1.second.end(), p2.second.begin(), p2.second.end());
 
-        return p1;
+    //     return p1;
+    // }
+
+    #ifndef mergeVertices
+    #define mergeVertices(p1, p2) \
+    { \
+            auto size = p1.first.size(); \
+            std::for_each(p2.second.begin(), p2.second.end(), [size](auto& v) { \
+                v += size; \
+            }); \
+                \
+            p1.first.insert(p1.first.end(), p2.first.begin(), p2.first.end()); \
+            p1.second.insert(p1.second.end(), p2.second.begin(), p2.second.end()); \
     }
+    #endif
 
-    static PairPointIndex generateTextLine(float x, float y, const std::string& line, const std::unordered_map<char, Character>& dictionary) {
+    static std::pair<std::vector<Font::Point>, std::vector<uint32_t>> generateTextLine(float x, float y, const std::string& line, const std::unordered_map<char, Character>& dictionary) {
         auto s = Timer::nowMilliseconds();
-        PairPointIndex result;
+        std::pair<std::vector<Font::Point>, std::vector<uint32_t>> result;
         unsigned long long v = 0, m = 0;
         for (size_t i = 0; i < line.size(); i++) {
             glm::vec2 center;
@@ -129,17 +142,7 @@ public:
             }
 
             s = Timer::nowMilliseconds();
-            // result = Font::mergeVertices(result, t);
-            {
-                auto size = result.first.size();
-
-                std::for_each(t.second.begin(), t.second.end(), [size](auto& v) {
-                    v += size;
-                });
-
-                result.first.insert(result.first.end(), t.first.begin(), t.first.end());
-                result.second.insert(result.second.end(), t.second.begin(), t.second.end());
-            }
+            mergeVertices(result, t);
             e = Timer::nowMilliseconds();
             m += e - s;
 
@@ -150,8 +153,8 @@ public:
         return result;
     }
 
-    static PairPointIndex generateTextLines(float x, float y, const std::vector<std::string>& lines, const std::unordered_map<char, Character>& dictionary, uint32_t lineWidth) {
-        PairPointIndex result;
+    static std::pair<std::vector<Font::Point>, std::vector<uint32_t>> generateTextLines(float x, float y, const std::vector<std::string>& lines, const std::unordered_map<char, Character>& dictionary, uint32_t lineWidth) {
+        std::pair<std::vector<Font::Point>, std::vector<uint32_t>> result;
 
         unsigned long long g = 0, m = 0;
         for (auto& line : lines) {
@@ -160,8 +163,7 @@ public:
             auto e = Timer::nowMilliseconds();
             g += e - s;
             
-
-            result = Font::mergeVertices(result, pointAndIndex);
+            mergeVertices(result, pointAndIndex);
             s = Timer::nowMilliseconds();
             m += s - e;
 
