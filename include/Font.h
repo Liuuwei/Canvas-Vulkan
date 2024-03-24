@@ -84,10 +84,10 @@ public:
         auto w2 = width / 2.0f, h2 = height / 2.0f;
 
         std::vector<Font::Point> vertices = {
-            {x - w2, y + h2, color.x, color.y, color.z, 0.0f, 1.0f, index}, 
-            {x + w2, y + h2, color.x, color.y, color.z,  1.0f, 1.0f, index}, 
-            {x - w2, y - h2, color.x, color.y, color.z, 0.0f, 0.0f, index}, 
-            {x + w2, y - h2, color.x, color.y, color.z, 1.0f, 0.0f, index}, 
+            {x - w2, y + h2, color.x, color.y, color.z, 0.0f, 0.0f, index}, 
+            {x + w2, y + h2, color.x, color.y, color.z,  1.0f, 0.0f, index}, 
+            {x - w2, y - h2, color.x, color.y, color.z, 0.0f, 1.0f, index}, 
+            {x + w2, y - h2, color.x, color.y, color.z, 1.0f, 1.0f, index}, 
         };
 
         std::vector<uint32_t> indices = {
@@ -96,6 +96,25 @@ public:
 
         return {vertices, indices};
     }
+
+    #ifndef defVertices
+    #define defVertices(vertices, indices, x, y, character, color) \
+    { \
+        auto w2 = character.width_ / 2.0f, h2 = character.height_ / 2.0f; \
+        auto index = character.index_; \
+      \
+        vertices = { \
+            {x - w2, y + h2, color.x, color.y, color.z, 0.0f, 0.0f, index}, \
+            {x + w2, y + h2, color.x, color.y, color.z,  1.0f, 0.0f, index}, \
+            {x - w2, y - h2, color.x, color.y, color.z, 0.0f, 1.0f, index}, \
+            {x + w2, y - h2, color.x, color.y, color.z, 1.0f, 1.0f, index}, \
+        }; \
+      \
+        indices = { \
+            0, 1, 2, 2, 1, 3 \
+        }; \
+    }
+    #endif
 
     // typedef std::pair<std::vector<Point>, std::vector<uint32_t>> PairPointIndex;
     // static PairPointIndex merge(PairPointIndex p1, PairPointIndex p2) {
@@ -128,27 +147,25 @@ public:
         auto s = Timer::nowMilliseconds();
         std::pair<std::vector<Font::Point>, std::vector<uint32_t>> result;
         unsigned long long v = 0, m = 0;
+        bool isSpace_ = false;
         for (size_t i = 0; i < line.size(); i++) {
             glm::vec2 center;
             center.x = x + dictionary.at(line[i]).offsetX_ + dictionary.at(line[i]).width_ / 2.0f;
             center.y = y + dictionary.at(line[i]).offsetY_ - dictionary.at(line[i]).height_ / 2.0f;
-            auto s = Timer::nowMilliseconds();
+            // auto s = Timer::nowMilliseconds();
             auto t = Font::vertices(center.x, center.y, dictionary.at(line[i]), dictionary.at(line[i]).color_);
-            auto e = Timer::nowMilliseconds();
-            v += e - s;
-            
-            for (auto& point : t.first) {
-                point.texCoord_.y = 1.0f - point.texCoord_.y;
-            }
+            // auto e = Timer::nowMilliseconds();
+            // v += e - s;
 
-            s = Timer::nowMilliseconds();
+            
+            // s = Timer::nowMilliseconds();
             mergeVertices(result, t);
-            e = Timer::nowMilliseconds();
-            m += e - s;
+            // e = Timer::nowMilliseconds();
+            // m += e - s;
 
             x += dictionary.at(line[i]).advance_;
         }
-        std::cout << std::format("[once] vertices ms: {}, merge ms: {}\n", v, m);
+        // std::cout << std::format("[once] vertices ms: {}, merge ms: {}\n", v, m);
 
         return result;
     }
@@ -158,19 +175,19 @@ public:
 
         unsigned long long g = 0, m = 0;
         for (auto& line : lines) {
-            auto s = Timer::nowMilliseconds();
+            // auto s = Timer::nowMilliseconds();
             auto pointAndIndex = Font::generateTextLine(x, y, line, dictionary);
-            auto e = Timer::nowMilliseconds();
-            g += e - s;
+            // auto e = Timer::nowMilliseconds();
+            // g += e - s;
             
             mergeVertices(result, pointAndIndex);
-            s = Timer::nowMilliseconds();
-            m += s - e;
+            // s = Timer::nowMilliseconds();
+            // m += s - e;
 
             y -= lineWidth;
         }
 
-        std::cout << std::format("generate ms: {}, merge ms: {}\n", g, m);
+        // std::cout << std::format("generate ms: {}, merge ms: {}\n", g, m);
 
         return result;
     }
