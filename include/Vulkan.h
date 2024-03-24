@@ -4,6 +4,7 @@
 #include "Fence.h"
 #include "Image.h"
 #include "PipelineLayout.h"
+#include "Plane.h"
 #include "RenderPass.h"
 #include "Sampler.h"
 #include "Semaphore.h"
@@ -93,6 +94,7 @@ private:
 
     void createCanvasPipeline();
     void createTextPipeline();
+    void createCursorPipeline();
 
     void createTextDescriptorPool();
     void createCanvasDescriptorPool();
@@ -102,6 +104,7 @@ private:
 
     void createTextDescriptorSet();
     void createCanvasDescriptorSet();
+    void createCursorDescriptorSet();
 
     void processText();
     void updateTexture();
@@ -210,6 +213,14 @@ private:
     std::unique_ptr<Buffer> fontIndexBuffer_;
 
     std::unique_ptr<Editor> editor_;
+    std::unique_ptr<PipelineLayout> cursorPipelineLayout_;
+    std::unique_ptr<Pipeline> cursorPipeline_;
+    VkDescriptorSet cursorDescriptorSet_ = VK_NULL_HANDLE;
+    std::unique_ptr<Buffer> cursorVertexBuffer_;
+    std::unique_ptr<Buffer> cursorIndexBuffer_;
+    std::vector<Plane::Point> cursorVertices_;
+    std::vector<uint32_t> cursorIndices_;
+    glm::vec3 cursorColor_{};
 
     int inputText_ = 0;
     int capsLock_ = 0;
@@ -228,8 +239,7 @@ private:
     const glm::vec3 green3_ = glm::vec3(0.0f, 1.0f, 0.0f);
     const glm::vec3 blue3_ = glm::vec3(0.0f, 0.0f, 1.0f);
     const glm::vec3 black3_ = glm::vec3(0.0f, 0.0f, 0.0f);
-
-
+    
     Color color_ = Write;
 
     struct UniformBufferObject {
