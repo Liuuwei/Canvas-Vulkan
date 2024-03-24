@@ -11,6 +11,7 @@
 #include "Pipeline.h"
 #include "PipelineLayout.h"
 #include "Swapchain.h"
+#include "Timer.h"
 #include "Tools.h"
 #include "vulkan/vulkan_core.h"
 #include <cassert>
@@ -48,7 +49,13 @@ Vulkan::Vulkan(const std::string& title, uint32_t width, uint32_t height) : widt
 void Vulkan::run() {
     while (!glfwWindowShouldClose(windows_)) {
         glfwPollEvents();
+        static unsigned long long prev = Timer::nowMilliseconds();
         draw();
+        auto curr = Timer::nowMilliseconds();
+        char msg[64];
+        snprintf(msg, 10, "ms: %.0f", 1.0f / (static_cast<float>(curr - prev) / 1000));
+        prev = curr;
+        glfwSetWindowTitle(windows_, msg);
     }
 
     vkDeviceWaitIdle(device_);
@@ -388,7 +395,7 @@ void Vulkan::createCanvasDescriptorPool() {
     canvasDescriptorPool_->flags_ = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     canvasDescriptorPool_->poolSizeCount_ = static_cast<uint32_t>(poolSizes.size());
     canvasDescriptorPool_->pPoolSizes_ = poolSizes.data();
-    canvasDescriptorPool_->maxSets_ = 1;
+    canvasDescriptorPool_->maxSets_ = 2;
     canvasDescriptorPool_->init();
 }
 
@@ -441,6 +448,7 @@ void Vulkan::createCanvasDescriptorSetLayout() {
 void Vulkan::createDescriptorSet() {
     createTextDescriptorSet();
     createCanvasDescriptorSet();
+    createCursorDescriptorSet();
 }
 
 void Vulkan::createTextDescriptorSet() {
@@ -530,6 +538,47 @@ void Vulkan::createCanvasDescriptorSet() {
     vkUpdateDescriptorSets(device_, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 }
 
+void Vulkan::createCursorDescriptorSet() {
+    std::vector<VkDescriptorSetLayout> descriptorSetLayouts(1, canvasDescriptorSetLayout_->descriptorSetLayout());
+
+    VkDescriptorSetAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocateInfo.descriptorPool = canvasDescriptorPool_->descriptorPool();
+    allocateInfo.descriptorSetCount = static_cast<uint32_t>(descriptorSetLayouts.size());
+    allocateInfo.pSetLayouts = descriptorSetLayouts.data();
+
+    if (canvasDescriptorSets_ != VK_NULL_HANDLE) {
+        VK_CHECK(vkFreeDescriptorSets(device_, canvasDescriptorPool_->descriptorPool(), 1, &cursorDescriptorSet_));
+    }
+    VK_CHECK(vkAllocateDescriptorSets(device_, &allocateInfo, &cursorDescriptorSet_));
+
+    VkDescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = uniformBuffers_->buffer();
+    bufferInfo.offset = 0;
+    bufferInfo.range = sizeof(UniformBufferObject);
+
+    VkDescriptorImageInfo samplerInfo{};
+    samplerInfo.imageView = canvasImage_->view();
+    samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    samplerInfo.sampler = canvasSampler_->sampler();
+
+    std::vector<VkWriteDescriptorSet> descriptorWrites(2);
+    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[0].dstSet = cursorDescriptorSet_;
+    descriptorWrites[0].dstBinding = 0;
+    descriptorWrites[0].descriptorCount = 1;
+    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[1].dstSet = cursorDescriptorSet_;
+    descriptorWrites[1].dstBinding = 1;
+    descriptorWrites[1].descriptorCount = 1;
+    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrites[1].pImageInfo = &samplerInfo;
+
+    vkUpdateDescriptorSets(device_, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+}
 
 void Vulkan::createVertex() {
     canvas_ = std::make_unique<Plane>();
@@ -551,9 +600,15 @@ void Vulkan::createEditor() {
     // }
 }
 
+void Vulkan::createGraphicsPipelines() {
+    createCanvasPipeline();
+    createTextPipeline();
+    createCursorPipeline();
+}
+
 void Vulkan::createTextPipeline() {
-    auto vertFont = ShaderModule(device_, "../shaders/spv/VertFont.spv"); 
-    auto fragFont = ShaderModule(device_, "../shaders/spv/FragFont.spv");
+    auto vertFont = ShaderModule(device_, "../shaders/spv/FontVert.spv"); 
+    auto fragFont = ShaderModule(device_, "../shaders/spv/FontFrag.spv");
 
     VkPipelineShaderStageCreateInfo vertexStageInfo{}, fragmentStageInfo{};
     vertexStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -655,8 +710,8 @@ void Vulkan::createTextPipeline() {
 }
 
 void Vulkan::createCanvasPipeline() {
-    auto vertCanvas = ShaderModule(device_, "../shaders/spv/VertCanvas.spv");
-    auto fragCanvas = ShaderModule(device_, "../shaders/spv/FragCanvas.spv");
+    auto vertCanvas = ShaderModule(device_, "../shaders/spv/CanvasVert.spv");
+    auto fragCanvas = ShaderModule(device_, "../shaders/spv/CanvasFrag.spv");
 
     VkPipelineShaderStageCreateInfo vertexStageInfo{}, fragmentStageInfo{};
     vertexStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -757,9 +812,107 @@ void Vulkan::createCanvasPipeline() {
     canvasPipeline_->init();
 }
 
-void Vulkan::createGraphicsPipelines() {
-    createCanvasPipeline();
-    createTextPipeline();
+void Vulkan::createCursorPipeline() {
+    auto vertCanvas = ShaderModule(device_, "../shaders/spv/CursorVert.spv");
+    auto fragCanvas = ShaderModule(device_, "../shaders/spv/CursorFrag.spv");
+
+    VkPipelineShaderStageCreateInfo vertexStageInfo{}, fragmentStageInfo{};
+    vertexStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertexStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertexStageInfo.module = vertCanvas.shader();
+    vertexStageInfo.pName = "main";
+
+    fragmentStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragmentStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragmentStageInfo.module = fragCanvas.shader();
+    fragmentStageInfo.pName = "main";
+
+    std::vector<VkPipelineShaderStageCreateInfo> shaderStages{vertexStageInfo, fragmentStageInfo};
+    
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    auto bindingDescription = canvas_->bindingDescription(0);
+    auto attributeDescription = canvas_->attributeDescription(0);
+
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescription.size());
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescription.data();
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
+    inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssemblyInfo.topology = canvas_->topology();
+
+    VkPipelineViewportStateCreateInfo viewportInfo{};
+    viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportInfo.viewportCount = 1;
+    viewportInfo.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizaInfo{};
+    rasterizaInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizaInfo.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizaInfo.cullMode = VK_CULL_MODE_NONE;
+    rasterizaInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizaInfo.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multipleInfo{};
+    multipleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multipleInfo.rasterizationSamples = msaaSamples_;
+    multipleInfo.minSampleShading = 1.0f;
+    
+    VkPipelineDepthStencilStateCreateInfo depthStencilInfo{};
+    depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencilInfo.depthTestEnable = VK_TRUE;
+    depthStencilInfo.depthWriteEnable = VK_TRUE;
+    depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencilInfo.minDepthBounds = 0.0f;
+    depthStencilInfo.maxDepthBounds = 1.0f;
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachmentInfo{};
+    colorBlendAttachmentInfo.blendEnable = VK_TRUE;
+    colorBlendAttachmentInfo.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachmentInfo.srcColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+    colorBlendAttachmentInfo.dstColorBlendFactor = VK_BLEND_FACTOR_DST_ALPHA;
+    colorBlendAttachmentInfo.colorBlendOp = VK_BLEND_OP_ADD;
+    colorBlendAttachmentInfo.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    colorBlendAttachmentInfo.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    colorBlendAttachmentInfo.alphaBlendOp = VK_BLEND_OP_ADD;
+    
+    VkPipelineColorBlendStateCreateInfo colorBlendInfo{};
+    colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendInfo.attachmentCount = 1;
+    colorBlendInfo.pAttachments = &colorBlendAttachmentInfo;
+
+    std::vector<VkDynamicState> dynamics{
+        VK_DYNAMIC_STATE_VIEWPORT, 
+        VK_DYNAMIC_STATE_SCISSOR, 
+    };
+    VkPipelineDynamicStateCreateInfo dynamicInfo{};
+    dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicInfo.dynamicStateCount = static_cast<uint32_t>(dynamics.size());
+    dynamicInfo.pDynamicStates = dynamics.data();
+
+    std::vector<VkDescriptorSetLayout> descriptorSetLayouts = {canvasDescriptorSetLayout_->descriptorSetLayout()};
+    cursorPipelineLayout_ = std::make_unique<PipelineLayout>(device_);
+    cursorPipelineLayout_->setLayoutCount_ = static_cast<uint32_t>(descriptorSetLayouts.size());
+    cursorPipelineLayout_->pSetLayouts_ = descriptorSetLayouts.data();
+    cursorPipelineLayout_->init();
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    cursorPipeline_ = std::make_unique<Pipeline>(device_);
+    cursorPipeline_->stageCount_ = shaderStages.size();
+    cursorPipeline_->pStages_ = shaderStages.data();
+    cursorPipeline_->pVertexInputState_ = &vertexInputInfo;
+    cursorPipeline_->pInputAssemblyState_ = &inputAssemblyInfo;
+    cursorPipeline_->pViewportState_ = &viewportInfo;
+    cursorPipeline_->pRasterizationState_ = &rasterizaInfo;;
+    cursorPipeline_->pMultisampleState_ = &multipleInfo;
+    cursorPipeline_->pDepthStencilState_ = &depthStencilInfo;
+    cursorPipeline_->pColorBlendState_ = &colorBlendInfo;
+    cursorPipeline_->pDynamicState_ = &dynamicInfo;
+    cursorPipeline_->layout_ = cursorPipelineLayout_->pipelineLayout();
+    cursorPipeline_->renderPass_ = renderPass_->renderPass();
+    cursorPipeline_->init();
 }
 
 void Vulkan::createColorResource() {
@@ -964,6 +1117,20 @@ void Vulkan::recordCommadBuffer(VkCommandBuffer commandBuffer, uint32_t imageInd
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(fontIndices_.size()), 1, 0, 0, 0);
         }
 
+        // cursor
+        {
+            vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, cursorPipeline_->pipeline());
+
+            std::vector<VkDescriptorSet> descriptorSets{cursorDescriptorSet_};
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, cursorPipelineLayout_->pipelineLayout(), 0, static_cast<uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
+
+            std::vector<VkBuffer> vertexBuffer = {cursorVertexBuffer_->buffer()};
+            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffer.data(), offsets);
+            vkCmdBindIndexBuffer(commandBuffer, cursorIndexBuffer_->buffer(), 0, VK_INDEX_TYPE_UINT32);
+            
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(cursorIndices_.size()), 1, 0, 0, 0);
+        }
+
         // Canvas
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, canvasPipeline_->pipeline());
         std::vector<VkDescriptorSet> canvasDescriptorSets{canvasDescriptorSets_};
@@ -1044,6 +1211,7 @@ void Vulkan::loadAssets() {
 void Vulkan::loadTextures() {
     int texWidth, texHeight, texChannels;
     auto pixel = stbi_load(canvasTexturePath_.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
     if (!pixel) {
         throw std::runtime_error("failed to load canvas texture");
     }
@@ -1121,6 +1289,8 @@ void Vulkan::loadChars() {
             size = texWidth * texHeight * 1;
         }
 
+        std::cout << advance << std::endl;
+
         currentChar.char_ = c;
         currentChar.offsetX_ = offsetX;
         currentChar.offsetY_ = offsetY;
@@ -1184,13 +1354,22 @@ void Vulkan::updateDrawAssets() {
     auto data = uniformBuffers_->map(sizeof(ubo));    
     memcpy(data, &ubo, sizeof(ubo));
     
+    // text
     {   
+        // auto s = Timer::nowMilliseconds();
         if (editor_->wordCount_ > 0) {
+            std::cout << editor_->limit_.up_ << ", " << editor_->limit_.bottom_ << std::endl;
             auto text = std::vector<std::string>(editor_->lines_.begin() + editor_->limit_.up_, editor_->lines_.begin() + editor_->limit_.bottom_);
+            // for (auto& s : text) {
+            //     std::cout << s << std::endl;
+            // }
+            // auto s = Timer::nowMilliseconds();
             auto t = font_->generateTextLines(-static_cast<float>(swapChain_->width()) / 2.0f, static_cast<float>(swapChain_->height()) / 2.0f - editor_->lineHeight_, text, dictionary_, editor_->lineHeight_);
+            // auto e = Timer::nowMilliseconds();
+            // std::cout << std::format("generate vertices ms: {}\n", e - s);
             fontVertices_ = t.first;
             fontIndices_ = t.second;
-            
+
             // font vertices
             VkDeviceSize size = sizeof(fontVertices_[0]) * fontVertices_.size();
 
@@ -1247,6 +1426,98 @@ void Vulkan::updateDrawAssets() {
 
             copyBuffer(staginBuffer->buffer(), fontIndexBuffer_->buffer(), size);
         }
+        // auto e = Timer::nowMilliseconds();
+        // std::cout << std::format("create text buffer ms: {}\n", e - s); 
+    }
+
+    // cursor
+    {   
+        static glm::vec3 cursorColor(1.0f, 1.0f, 1.0f);
+        static auto prevTime = Timer::nowMilliseconds();
+        static unsigned long long deltaTime = 0;
+        auto currTime = Timer::nowMilliseconds();
+        deltaTime += currTime - prevTime;
+        prevTime = currTime;
+        if (deltaTime >= 500) {
+            deltaTime = 0;
+            if (cursorColor.x == 1.0f) {
+                cursorColor = glm::vec3(0.0f, 0.0f, 0.0f);
+            } else {
+                cursorColor = glm::vec3(1.0f, 1.0f, 1.0f);
+            }
+        }
+        
+
+        float x = static_cast<float>(editor_->cursorPos_.x);
+        float y = static_cast<float>(editor_->cursorPos_.y - editor_->limit_.up_);
+
+        x += editor_->lineNumberOffset_;
+        x *= 19;
+        y *= static_cast<float>(editor_->lineHeight_);
+        y += static_cast<float>(editor_->lineHeight_) / 2.0f;
+
+        x += -static_cast<float>(swapChain_->width() / 2.0f);
+
+        y = static_cast<float>(swapChain_->height() / 2.0f) - y;
+
+        auto t = canvas_->vertices(x, y, 2.0f, editor_->lineHeight_, cursorColor);
+        cursorVertices_ = t.first;
+        cursorIndices_ = t.second;
+
+        VkDeviceSize size = sizeof(cursorVertices_[0]) * cursorVertices_.size();
+
+        cursorVertexBuffer_.reset(nullptr);
+        cursorVertexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
+        cursorVertexBuffer_->size_ = size;
+        cursorVertexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        cursorVertexBuffer_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        cursorVertexBuffer_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        cursorVertexBuffer_->sharingMode_ = queueFamilies_.sharingMode();
+        cursorVertexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        cursorVertexBuffer_->init();
+
+        auto staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        staginBuffer->size_ = size;
+        staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        staginBuffer->sharingMode_ = VK_SHARING_MODE_EXCLUSIVE;
+        staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        staginBuffer->init();
+
+        auto data = staginBuffer->map(size);
+        memcpy(data, cursorVertices_.data(), size);
+        staginBuffer->unMap();
+
+        copyBuffer(staginBuffer->buffer(), cursorVertexBuffer_->buffer(), size);
+
+        // font index
+        size = sizeof(cursorIndices_[0]) * cursorIndices_.size();
+
+        cursorIndexBuffer_.reset(nullptr);
+        cursorIndexBuffer_ = std::make_unique<Buffer>(physicalDevice_, device_);
+        cursorIndexBuffer_->size_ = size;
+        cursorIndexBuffer_->usage_ = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        cursorIndexBuffer_->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        cursorIndexBuffer_->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        cursorIndexBuffer_->sharingMode_ = queueFamilies_.sharingMode();
+        cursorIndexBuffer_->memoryProperties_ = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        cursorIndexBuffer_->init();
+
+        staginBuffer = std::make_unique<Buffer>(physicalDevice_, device_);
+        staginBuffer->size_ = size;
+        staginBuffer->usage_ = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        staginBuffer->sharingMode_ = VK_SHARING_MODE_EXCLUSIVE;
+        staginBuffer->queueFamilyIndexCount_ = static_cast<uint32_t>(queueFamilies_.sets().size());
+        staginBuffer->pQueueFamilyIndices_ = queueFamilies_.sets().data();
+        staginBuffer->memoryProperties_ = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+        staginBuffer->init();
+
+        data = staginBuffer->map(size);
+        memcpy(data, cursorIndices_.data(), size);
+        staginBuffer->unMap();
+
+        copyBuffer(staginBuffer->buffer(), cursorIndexBuffer_->buffer(), size);
     }
 }   
 
@@ -1545,6 +1816,10 @@ void Vulkan::inputText(int key, int scancode, int mods) {
         if (key != 340) {
             editor_->insertChar(c);
         }
+    } else if (key == GLFW_KEY_TAB) {
+        editor_->insertStr("    ");
+    } else {
+        editor_->moveCursor(static_cast<Editor::Direction>(key));
     }
 }
 
