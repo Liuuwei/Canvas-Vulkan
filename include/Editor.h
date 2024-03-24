@@ -45,6 +45,7 @@ public:
     uint32_t currLine_ = 0;
     std::vector<std::string> lines_;
     glm::uvec2 cursorPos_ = {0, 0};
+    glm::uvec2 cursorPosTrue_ = {};
     glm::uvec2 screen_;
     uint32_t showLines_;
     Limit limit_{};

@@ -150,13 +150,7 @@ void Editor::addLineNumber(std::string& line, uint32_t lineNumber) {
 void Editor::adjust(uint32_t width, uint32_t height) {
     screen_ = glm::uvec2(width, height);
 
-    auto updateSize = static_cast<float>(height) / static_cast<float>(lineHeight_) / static_cast<float>(showLines_);
     showLines_ = height / lineHeight_;
-
-    float upSize = cursorPos_.y - limit_.up_;
-    upSize *= updateSize;
-
-    limit_.up_ = std::max(static_cast<int>(cursorPos_.x) - static_cast<int>(upSize), static_cast<int>(0));
 
     limit_.bottom_ = limit_.up_ + showLines_;
     limit_.bottom_ = std::min(limit_.bottom_, static_cast<uint32_t>(lines_.size()));
